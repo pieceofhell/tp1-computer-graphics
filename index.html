@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TP1 Computação Gráfica</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="panel brand-panel">
+          <p class="eyebrow">Computação Gráfica</p>
+          <h1>TP1 Unidade 1</h1>
+          <p class="panel-copy">
+            Área de desenho baseada em pixels com rasterização, transformações 2D, seleção retangular e recorte.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Ferramentas</h2>
+            <span id="toolLabel" class="chip">Ponto</span>
+          </div>
+          <div class="tool-grid">
+            <button class="tool-button active" data-tool="point">Ponto</button>
+            <button class="tool-button" data-tool="line">Reta</button>
+            <button class="tool-button" data-tool="circle">Circunferência</button>
+            <button class="tool-button" data-tool="polygon">Polígono</button>
+            <button class="tool-button" data-tool="select">Seleção</button>
+            <button class="tool-button" data-tool="clip-window">Janela de recorte</button>
+          </div>
+          <div class="inline-actions">
+            <button id="finishPolygonButton" class="secondary-button" disabled>Finalizar polígono</button>
+            <button id="cancelPendingButton" class="secondary-button" disabled>Cancelar desenho</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Algoritmos</h2>
+          </div>
+          <label class="field">
+            <span>Rasterização de retas</span>
+            <select id="lineAlgorithmSelect">
+              <option value="dda">DDA</option>
+              <option value="bresenham">Bresenham</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Arestas do polígono</span>
+            <select id="polygonAlgorithmSelect">
+              <option value="bresenham">Bresenham</option>
+              <option value="dda">DDA</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Recorte de retas</span>
+            <select id="clipAlgorithmSelect">
+              <option value="cohen">Cohen-Sutherland</option>
+              <option value="liang">Liang-Barsky</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Transformações 2D</h2>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>Translação X</span>
+              <input id="translateXInput" type="number" value="5" step="1" />
+            </label>
+            <label class="field">
+              <span>Translação Y</span>
+              <input id="translateYInput" type="number" value="5" step="1" />
+            </label>
+          </div>
+          <div class="inline-actions">
+            <button id="translateButton">Aplicar translação</button>
+          </div>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Escala X</span>
+              <input id="scaleXInput" type="number" value="1.2" step="0.1" />
+            </label>
+            <label class="field">
+              <span>Escala Y</span>
+              <input id="scaleYInput" type="number" value="1.2" step="0.1" />
+            </label>
+          </div>
+          <div class="inline-actions">
+            <button id="scaleButton">Aplicar escala</button>
+          </div>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Rotação (graus)</span>
+              <input id="rotationInput" type="number" value="30" step="5" />
+            </label>
+            <label class="field">
+              <span>Pivô</span>
+              <select id="pivotModeSelect">
+                <option value="selection-center">Centro da seleção</option>
+                <option value="origin">Origem (0,0)</option>
+              </select>
+            </label>
+          </div>
+          <div class="inline-actions">
+            <button id="rotateButton">Aplicar rotação</button>
+          </div>
+
+          <div class="inline-actions reflection-row">
+            <button id="reflectXButton">Reflexão X</button>
+            <button id="reflectYButton">Reflexão Y</button>
+            <button id="reflectXYButton">Reflexão XY</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Recorte</h2>
+          </div>
+          <p class="panel-copy small">
+            Defina uma janela com a ferramenta <strong>Janela de recorte</strong> e aplique o algoritmo sobre as retas selecionadas.
+          </p>
+          <div class="inline-actions">
+            <button id="applyClipButton">Aplicar recorte</button>
+            <button id="clearClipButton" class="secondary-button">Limpar janela</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Ações</h2>
+          </div>
+          <div class="inline-actions">
+            <button id="deleteSelectedButton" class="secondary-button">Excluir seleção</button>
+            <button id="clearCanvasButton" class="danger-button">Limpar projeto</button>
+          </div>
+          <div id="stats" class="stats"></div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <div class="canvas-toolbar">
+          <div>
+            <p class="canvas-title">Área de desenho</p>
+            <p class="canvas-copy">Use cliques e arrastes no canvas. A origem está no centro, com eixo Y apontando para cima.</p>
+          </div>
+          <div class="coordinates">
+            <span id="cursorPosition">Cursor: (0, 0)</span>
+            <span id="selectionSummary">Selecionados: 0</span>
+          </div>
+        </div>
+
+        <div class="canvas-frame">
+          <canvas id="drawingCanvas" width="1089" height="729"></canvas>
+        </div>
+
+        <section class="status-panel">
+          <p class="status-title">Status</p>
+          <p id="statusMessage">Pronto para desenhar.</p>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
