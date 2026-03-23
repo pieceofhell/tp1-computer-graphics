@@ -17,6 +17,9 @@ const COLORS = {
 
 const canvas = document.getElementById("drawingCanvas");
 const ctx = canvas.getContext("2d");
+const canvasFrame = document.querySelector(".canvas-frame");
+const workspace = document.querySelector(".workspace");
+const workspaceSplitter = document.getElementById("workspaceSplitter");
 
 const toolButtons = [...document.querySelectorAll("[data-tool]")];
 const toolLabel = document.getElementById("toolLabel");
@@ -25,6 +28,24 @@ const polygonAlgorithmSelect = document.getElementById("polygonAlgorithmSelect")
 const clipAlgorithmSelect = document.getElementById("clipAlgorithmSelect");
 const finishPolygonButton = document.getElementById("finishPolygonButton");
 const cancelPendingButton = document.getElementById("cancelPendingButton");
+const translateButton = document.getElementById("translateButton");
+const scaleButton = document.getElementById("scaleButton");
+const rotateButton = document.getElementById("rotateButton");
+const reflectXButton = document.getElementById("reflectXButton");
+const reflectYButton = document.getElementById("reflectYButton");
+const reflectXYButton = document.getElementById("reflectXYButton");
+const applyClipButton = document.getElementById("applyClipButton");
+const clearClipButton = document.getElementById("clearClipButton");
+const deleteSelectedButton = document.getElementById("deleteSelectedButton");
+const clearCanvasButton = document.getElementById("clearCanvasButton");
+const toggleDataViewButton = document.getElementById("toggleDataViewButton");
+const clearTraceButton = document.getElementById("clearTraceButton");
+const themeToggleButton = document.getElementById("themeToggleButton");
+const zoomOutButton = document.getElementById("zoomOutButton");
+const zoomSlider = document.getElementById("zoomSlider");
+const zoomResetButton = document.getElementById("zoomResetButton");
+const zoomInButton = document.getElementById("zoomInButton");
+const zoomLevelLabel = document.getElementById("zoomLevelLabel");
 const translateXInput = document.getElementById("translateXInput");
 const translateYInput = document.getElementById("translateYInput");
 const scaleXInput = document.getElementById("scaleXInput");
@@ -35,6 +56,8 @@ const cursorPosition = document.getElementById("cursorPosition");
 const selectionSummary = document.getElementById("selectionSummary");
 const stats = document.getElementById("stats");
 const statusMessage = document.getElementById("statusMessage");
+const dataInspector = document.getElementById("dataInspector");
+const traceInspector = document.getElementById("traceInspector");
 
 const state = {
   tool: "point",
@@ -44,6 +67,14 @@ const state = {
   pendingPoints: [],
   drag: null,
   clipWindow: null,
+  pixelSize: WORLD.pixelSize,
+  zoomScale: 0.8,
+  dataViewMode: "selected",
+  theme: "light",
+  algorithmTrace: {
+    title: "Console iniciado",
+    lines: ["Aguardando a criação de uma reta ou a aplicação de um recorte."],
+  },
 };
 
 const toolNames = {
@@ -74,9 +105,104 @@ function clonePoint(point) {
   return { x: point.x, y: point.y };
 }
 
+function formatPoint(point) {
+  return `(${Number(point.x).toFixed(2)}, ${Number(point.y).toFixed(2)})`;
+}
+
+function refreshAlgorithmTrace() {
+  traceInspector.textContent = [
+    `>>> ${state.algorithmTrace.title}`,
+    "",
+    ...state.algorithmTrace.lines,
+  ].join("\n");
+}
+
+function setAlgorithmTrace(title, lines) {
+  state.algorithmTrace = { title, lines };
+  refreshAlgorithmTrace();
+}
+
+function applyTheme(theme) {
+  state.theme = theme;
+  document.body.classList.toggle("dark-theme", theme === "dark");
+  themeToggleButton.textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
+}
+
+function updateZoomLabel() {
+  zoomLevelLabel.textContent = `Zoom ${Math.round(state.zoomScale * 100)}%`;
+  zoomSlider.value = String(Math.round(state.zoomScale * 100));
+}
+
+function serializeShape(shape) {
+  switch (shape.type) {
+    case "point":
+      return {
+        id: shape.id,
+        type: shape.type,
+        position: clonePoint(shape.position),
+      };
+    case "line":
+      return {
+        id: shape.id,
+        type: shape.type,
+        algorithm: shape.algorithm,
+        start: clonePoint(shape.start),
+        end: clonePoint(shape.end),
+      };
+    case "circle":
+      return {
+        id: shape.id,
+        type: shape.type,
+        center: clonePoint(shape.center),
+        radius: shape.radius,
+      };
+    case "polygon":
+      return {
+        id: shape.id,
+        type: shape.type,
+        algorithm: shape.algorithm,
+        vertices: shape.vertices.map(clonePoint),
+      };
+    default:
+      return { id: shape.id, type: shape.type };
+  }
+}
+
+function refreshDataInspector() {
+  const visibleShapes = state.dataViewMode === "selected"
+    ? state.shapes.filter((shape) => state.selectedIds.has(shape.id))
+    : state.shapes;
+
+  const inspectorPayload = {
+    mode: state.dataViewMode === "selected" ? "somente selecao" : "tudo",
+    tool: state.tool,
+    totals: {
+      shapes: state.shapes.length,
+      selected: state.selectedIds.size,
+      visibleInInspector: visibleShapes.length,
+    },
+    selectedIds: [...state.selectedIds],
+    clipWindow: state.clipWindow
+      ? {
+          minX: state.clipWindow.minX,
+          maxX: state.clipWindow.maxX,
+          minY: state.clipWindow.minY,
+          maxY: state.clipWindow.maxY,
+        }
+      : null,
+    pendingPoints: state.pendingPoints.map(clonePoint),
+    structures: visibleShapes.map(serializeShape),
+  };
+
+  dataInspector.textContent = JSON.stringify(inspectorPayload, null, 2);
+  toggleDataViewButton.textContent =
+    state.dataViewMode === "selected" ? "Mostrar tudo" : "Mostrar seleção";
+}
+
 function createShape(shape) {
   state.shapes.push({ ...shape, id: state.nextId++ });
   updateStats();
+  refreshDataInspector();
   render();
 }
 
@@ -93,8 +219,42 @@ function setTool(tool) {
     button.classList.toggle("active", button.dataset.tool === tool);
   });
   syncPendingButtons();
+  refreshDataInspector();
   render();
   setStatus(`Ferramenta ativa: ${toolNames[tool]}.`);
+}
+
+function setZoom(scale) {
+  state.zoomScale = Math.min(1, Math.max(0.45, Number(scale.toFixed(2))));
+  configureCanvasResolution();
+}
+
+function getCanvasSpaceMetrics() {
+  const workspaceStyles = window.getComputedStyle(workspace);
+  const workspaceHorizontalPadding =
+    parseFloat(workspaceStyles.paddingLeft) + parseFloat(workspaceStyles.paddingRight);
+  const frameStyles = window.getComputedStyle(canvasFrame);
+  const frameHorizontalPadding = parseFloat(frameStyles.paddingLeft) + parseFloat(frameStyles.paddingRight);
+  const totalAvailableWidth = Math.max(
+    320,
+    workspace.clientWidth - workspaceHorizontalPadding - frameHorizontalPadding,
+  );
+  return { totalAvailableWidth, workspaceHorizontalPadding, frameHorizontalPadding };
+}
+
+function shouldIgnoreShortcut(event) {
+  const target = event.target;
+  if (!target) {
+    return false;
+  }
+
+  const tagName = target.tagName?.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "select" ||
+    tagName === "textarea"
+  );
 }
 
 function syncPendingButtons() {
@@ -103,28 +263,30 @@ function syncPendingButtons() {
 }
 
 function worldToCanvas(point) {
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
+  const centerX = (WORLD.width * state.pixelSize) / 2;
+  const centerY = (WORLD.height * state.pixelSize) / 2;
   return {
-    x: centerX + point.x * WORLD.pixelSize,
-    y: centerY - point.y * WORLD.pixelSize,
+    x: centerX + point.x * state.pixelSize,
+    y: centerY - point.y * state.pixelSize,
   };
 }
 
 function canvasToWorld(event) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
+  const logicalWidth = WORLD.width * state.pixelSize;
+  const logicalHeight = WORLD.height * state.pixelSize;
+  const scaleX = logicalWidth / rect.width;
+  const scaleY = logicalHeight / rect.height;
   const canvasX = (event.clientX - rect.left) * scaleX;
   const canvasY = (event.clientY - rect.top) * scaleY;
-  const worldX = (canvasX - canvas.width / 2) / WORLD.pixelSize;
-  const worldY = (canvas.height / 2 - canvasY) / WORLD.pixelSize;
+  const worldX = (canvasX - logicalWidth / 2) / state.pixelSize;
+  const worldY = (logicalHeight / 2 - canvasY) / state.pixelSize;
   return sanitizeWorldPoint({ x: worldX, y: worldY });
 }
 
 function drawPixel(point, color) {
   const canvasPoint = worldToCanvas(point);
-  const size = WORLD.pixelSize;
+  const size = state.pixelSize;
   ctx.fillStyle = color;
   ctx.fillRect(
     Math.round(canvasPoint.x - size / 2 + 0.5),
@@ -155,10 +317,10 @@ function drawRectangleGuide(rect, color, lineDash = [8, 6]) {
   ctx.lineWidth = 2;
   ctx.setLineDash(lineDash);
   ctx.strokeRect(
-    topLeft.x - WORLD.pixelSize / 2,
-    topLeft.y - WORLD.pixelSize / 2,
-    bottomRight.x - topLeft.x + WORLD.pixelSize,
-    bottomRight.y - topLeft.y + WORLD.pixelSize,
+    topLeft.x - state.pixelSize / 2,
+    topLeft.y - state.pixelSize / 2,
+    bottomRight.x - topLeft.x + state.pixelSize,
+    bottomRight.y - topLeft.y + state.pixelSize,
   );
   ctx.restore();
 }
@@ -274,6 +436,76 @@ function getLinePixels(start, end, algorithm) {
   return algorithm === "dda"
     ? rasterizeLineDDA(start, end)
     : rasterizeLineBresenham(start, end);
+}
+
+function buildLineRasterTrace(start, end, algorithm) {
+  if (algorithm === "dda") {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const steps = Math.max(Math.abs(dx), Math.abs(dy));
+    const xIncrement = steps === 0 ? 0 : dx / steps;
+    const yIncrement = steps === 0 ? 0 : dy / steps;
+    const pixels = rasterizeLineDDA(start, end);
+    const lines = [
+      "Algoritmo: DDA",
+      `Entrada: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+      `dx=${dx}, dy=${dy}, steps=${steps}`,
+      `xIncrement=${xIncrement.toFixed(4)}, yIncrement=${yIncrement.toFixed(4)}`,
+    ];
+
+    let x = start.x;
+    let y = start.y;
+    const previewSteps = Math.min(8, steps + 1);
+    for (let step = 0; step < previewSteps; step += 1) {
+      lines.push(
+        `passo ${step}: x=${x.toFixed(4)}, y=${y.toFixed(4)} -> pixel ${formatPoint(sanitizeWorldPoint({ x, y }))}`,
+      );
+      x += xIncrement;
+      y += yIncrement;
+    }
+
+    if (steps + 1 > previewSteps) {
+      lines.push(`... ${steps + 1 - previewSteps} passo(s) omitido(s)`);
+    }
+    lines.push(`Total de pixels rasterizados: ${pixels.length}`);
+    return lines;
+  }
+
+  const dx = Math.abs(end.x - start.x);
+  const dy = Math.abs(end.y - start.y);
+  const sx = start.x < end.x ? 1 : -1;
+  const sy = start.y < end.y ? 1 : -1;
+  let err = dx - dy;
+  let x = start.x;
+  let y = start.y;
+  const pixels = rasterizeLineBresenham(start, end);
+  const lines = [
+    "Algoritmo: Bresenham",
+    `Entrada: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    `dx=${dx}, dy=${dy}, sx=${sx}, sy=${sy}, erroInicial=${err}`,
+  ];
+
+  for (let step = 0; step < Math.min(12, pixels.length); step += 1) {
+    const e2 = err * 2;
+    lines.push(`passo ${step}: pixel=(${x}, ${y}), err=${err}, e2=${e2}`);
+    if (x === end.x && y === end.y) {
+      break;
+    }
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+
+  if (pixels.length > 12) {
+    lines.push(`... ${pixels.length - 12} passo(s) omitido(s)`);
+  }
+  lines.push(`Total de pixels rasterizados: ${pixels.length}`);
+  return lines;
 }
 
 function getShapePixels(shape) {
@@ -482,6 +714,134 @@ function clipLineLiangBarsky(start, end, rect) {
   };
 }
 
+function traceClipLineCohenSutherland(start, end, rect) {
+  let x1 = start.x;
+  let y1 = start.y;
+  let x2 = end.x;
+  let y2 = end.y;
+  let code1 = getOutCode({ x: x1, y: y1 }, rect);
+  let code2 = getOutCode({ x: x2, y: y2 }, rect);
+  const lines = [
+    "Algoritmo: Cohen-Sutherland",
+    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    `Reta original: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+  ];
+
+  for (let iteration = 1; iteration <= 16; iteration += 1) {
+    lines.push(
+      `iteracao ${iteration}: code1=${code1.toString(2).padStart(4, "0")} code2=${code2.toString(2).padStart(4, "0")}`,
+    );
+
+    if (!(code1 | code2)) {
+      const result = {
+        start: sanitizeWorldPoint({ x: x1, y: y1 }),
+        end: sanitizeWorldPoint({ x: x2, y: y2 }),
+      };
+      lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
+      return { result, lines };
+    }
+
+    if (code1 & code2) {
+      lines.push("rejeitada: os codigos compartilham uma regiao externa.");
+      return { result: null, lines };
+    }
+
+    const outsideCode = code1 || code2;
+    let x = 0;
+    let y = 0;
+    let border = "esquerda";
+
+    if (outsideCode & 8) {
+      x = x1 + ((x2 - x1) * (rect.maxY - y1)) / (y2 - y1);
+      y = rect.maxY;
+      border = "topo";
+    } else if (outsideCode & 4) {
+      x = x1 + ((x2 - x1) * (rect.minY - y1)) / (y2 - y1);
+      y = rect.minY;
+      border = "base";
+    } else if (outsideCode & 2) {
+      y = y1 + ((y2 - y1) * (rect.maxX - x1)) / (x2 - x1);
+      x = rect.maxX;
+      border = "direita";
+    } else {
+      y = y1 + ((y2 - y1) * (rect.minX - x1)) / (x2 - x1);
+      x = rect.minX;
+      border = "esquerda";
+    }
+
+    lines.push(`interseccao na borda ${border}: ${formatPoint({ x, y })}`);
+
+    if (outsideCode === code1) {
+      x1 = x;
+      y1 = y;
+      code1 = getOutCode({ x: x1, y: y1 }, rect);
+      lines.push(`atualiza ponto inicial -> ${formatPoint({ x: x1, y: y1 })}`);
+    } else {
+      x2 = x;
+      y2 = y;
+      code2 = getOutCode({ x: x2, y: y2 }, rect);
+      lines.push(`atualiza ponto final -> ${formatPoint({ x: x2, y: y2 })}`);
+    }
+  }
+
+  lines.push("interrompido: limite de iteracoes atingido.");
+  return { result: null, lines };
+}
+
+function traceClipLineLiangBarsky(start, end, rect) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const p = [-dx, dx, -dy, dy];
+  const q = [
+    start.x - rect.minX,
+    rect.maxX - start.x,
+    start.y - rect.minY,
+    rect.maxY - start.y,
+  ];
+  let u1 = 0;
+  let u2 = 1;
+  const borders = ["esquerda", "direita", "base", "topo"];
+  const lines = [
+    "Algoritmo: Liang-Barsky",
+    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    `Reta original: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    `dx=${dx}, dy=${dy}`,
+  ];
+
+  for (let index = 0; index < 4; index += 1) {
+    if (p[index] === 0) {
+      lines.push(`borda ${borders[index]}: p=0, q=${q[index]}`);
+      if (q[index] < 0) {
+        lines.push("rejeitada: reta paralela e fora da janela.");
+        return { result: null, lines };
+      }
+      continue;
+    }
+
+    const ratio = q[index] / p[index];
+    lines.push(`borda ${borders[index]}: p=${p[index]}, q=${q[index]}, r=${ratio.toFixed(4)}`);
+    if (p[index] < 0) {
+      u1 = Math.max(u1, ratio);
+      lines.push(`atualiza u1 -> ${u1.toFixed(4)}`);
+    } else {
+      u2 = Math.min(u2, ratio);
+      lines.push(`atualiza u2 -> ${u2.toFixed(4)}`);
+    }
+  }
+
+  if (u1 > u2) {
+    lines.push(`rejeitada: u1 (${u1.toFixed(4)}) > u2 (${u2.toFixed(4)}).`);
+    return { result: null, lines };
+  }
+
+  const result = {
+    start: sanitizeWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
+    end: sanitizeWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
+  };
+  lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
+  return { result, lines };
+}
+
 function getShapeReferencePoints(shape) {
   switch (shape.type) {
     case "point":
@@ -547,6 +907,7 @@ function applyToSelectedShapes(transformer) {
   });
 
   updateStats();
+  refreshDataInspector();
   render();
   return touched;
 }
@@ -705,6 +1066,7 @@ function applyClip() {
   let clipped = 0;
   let removed = 0;
   let ignored = 0;
+  const traceBlocks = [];
 
   state.shapes = state.shapes.flatMap((shape) => {
     if (!state.selectedIds.has(shape.id)) {
@@ -716,21 +1078,27 @@ function applyClip() {
       return [shape];
     }
 
-    const result = algorithm === "cohen"
-      ? clipLineCohenSutherland(shape.start, shape.end, state.clipWindow)
-      : clipLineLiangBarsky(shape.start, shape.end, state.clipWindow);
+    const trace = algorithm === "cohen"
+      ? traceClipLineCohenSutherland(shape.start, shape.end, state.clipWindow)
+      : traceClipLineLiangBarsky(shape.start, shape.end, state.clipWindow);
+    traceBlocks.push(`Linha ${shape.id}\n${trace.lines.join("\n")}`);
 
-    if (!result) {
+    if (!trace.result) {
       removed += 1;
       state.selectedIds.delete(shape.id);
       return [];
     }
 
     clipped += 1;
-    return [{ ...shape, start: result.start, end: result.end }];
+    return [{ ...shape, start: trace.result.start, end: trace.result.end }];
   });
 
   updateStats();
+  refreshDataInspector();
+  setAlgorithmTrace(
+    `Recorte por ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
+    traceBlocks.length > 0 ? traceBlocks.join("\n\n----------------\n\n").split("\n") : ["Nenhuma reta foi processada."],
+  );
   render();
   setStatus(
     `Recorte ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}: ${clipped} reta(s) ajustada(s), ${removed} removida(s), ${ignored} elemento(s) ignorado(s).`,
@@ -745,6 +1113,7 @@ function clearProject() {
   state.clipWindow = null;
   updateStats();
   syncPendingButtons();
+  refreshDataInspector();
   render();
   setStatus("Projeto limpo.");
 }
@@ -760,6 +1129,7 @@ function deleteSelected() {
   const removed = before - state.shapes.length;
   state.selectedIds.clear();
   updateStats();
+  refreshDataInspector();
   render();
   setStatus(`${removed} elemento(s) removido(s).`);
 }
@@ -777,6 +1147,7 @@ function finishPolygon() {
   });
   state.pendingPoints = [];
   syncPendingButtons();
+  refreshDataInspector();
   setStatus("Polígono criado.");
 }
 
@@ -784,6 +1155,7 @@ function cancelPending() {
   state.pendingPoints = [];
   state.drag = null;
   syncPendingButtons();
+  refreshDataInspector();
   render();
   setStatus("Operação em andamento cancelada.");
 }
@@ -803,44 +1175,47 @@ function updateStats() {
   stats.textContent =
     `Pontos: ${totals.point} | Retas: ${totals.line} | Circunferências: ${totals.circle} | Polígonos: ${totals.polygon}`;
   selectionSummary.textContent = `Selecionados: ${state.selectedIds.size}`;
+  refreshDataInspector();
 }
 
 function renderGrid() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const logicalWidth = WORLD.width * state.pixelSize;
+  const logicalHeight = WORLD.height * state.pixelSize;
+  ctx.clearRect(0, 0, logicalWidth, logicalHeight);
   ctx.fillStyle = "#fffdf8";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, logicalWidth, logicalHeight);
 
   ctx.save();
   ctx.strokeStyle = "rgba(100, 96, 88, 0.12)";
   ctx.lineWidth = 1;
 
   for (let column = 0; column <= WORLD.width; column += 1) {
-    const x = column * WORLD.pixelSize;
+    const x = column * state.pixelSize;
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
+    ctx.lineTo(x, logicalHeight);
     ctx.stroke();
   }
 
   for (let row = 0; row <= WORLD.height; row += 1) {
-    const y = row * WORLD.pixelSize;
+    const y = row * state.pixelSize;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
+    ctx.lineTo(logicalWidth, y);
     ctx.stroke();
   }
 
   ctx.strokeStyle = "rgba(24, 57, 82, 0.35)";
   ctx.lineWidth = 2;
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
+  const centerX = logicalWidth / 2;
+  const centerY = logicalHeight / 2;
   ctx.beginPath();
   ctx.moveTo(centerX, 0);
-  ctx.lineTo(centerX, canvas.height);
+  ctx.lineTo(centerX, logicalHeight);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(0, centerY);
-  ctx.lineTo(canvas.width, centerY);
+  ctx.lineTo(logicalWidth, centerY);
   ctx.stroke();
   ctx.restore();
 }
@@ -917,6 +1292,7 @@ function addPointAt(position) {
 function addLinePoint(position) {
   state.pendingPoints.push(position);
   syncPendingButtons();
+  refreshDataInspector();
 
   if (state.pendingPoints.length < 2) {
     render();
@@ -931,6 +1307,10 @@ function addLinePoint(position) {
     end,
     algorithm: lineAlgorithmSelect.value,
   });
+  setAlgorithmTrace(
+    `Rasterização de reta por ${lineAlgorithmSelect.value.toUpperCase()}`,
+    buildLineRasterTrace(start, end, lineAlgorithmSelect.value),
+  );
   state.pendingPoints = [];
   syncPendingButtons();
   setStatus(`Reta criada com ${lineAlgorithmSelect.value.toUpperCase()}.`);
@@ -939,6 +1319,7 @@ function addLinePoint(position) {
 function addCirclePoint(position) {
   state.pendingPoints.push(position);
   syncPendingButtons();
+  refreshDataInspector();
 
   if (state.pendingPoints.length < 2) {
     render();
@@ -964,6 +1345,7 @@ function addCirclePoint(position) {
 function addPolygonVertex(position) {
   state.pendingPoints.push(position);
   syncPendingButtons();
+  refreshDataInspector();
   render();
   setStatus(`Vértice ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
 }
@@ -973,6 +1355,7 @@ function completeSelection(rect) {
     state.shapes.filter((shape) => isShapeInsideRect(shape, rect)).map((shape) => shape.id),
   );
   updateStats();
+  refreshDataInspector();
   render();
   setStatus(`${state.selectedIds.size} elemento(s) selecionado(s).`);
 }
@@ -1002,6 +1385,7 @@ canvas.addEventListener("pointermove", (event) => {
 
   if (state.drag) {
     state.drag.current = position;
+    refreshDataInspector();
     render();
     syncPendingButtons();
   }
@@ -1018,6 +1402,7 @@ canvas.addEventListener("pointerdown", (event) => {
     current: position,
   };
   syncPendingButtons();
+  refreshDataInspector();
   render();
 });
 
@@ -1033,6 +1418,7 @@ canvas.addEventListener("pointerup", (event) => {
       completeSelection(rect);
     } else {
       state.clipWindow = rect;
+      refreshDataInspector();
       render();
       setStatus(
         `Janela de recorte definida: [${rect.minX}, ${rect.minY}] até [${rect.maxX}, ${rect.maxY}].`,
@@ -1050,24 +1436,160 @@ toolButtons.forEach((button) => {
 
 finishPolygonButton.addEventListener("click", finishPolygon);
 cancelPendingButton.addEventListener("click", cancelPending);
-document.getElementById("translateButton").addEventListener("click", applyTranslation);
-document.getElementById("scaleButton").addEventListener("click", applyScale);
-document.getElementById("rotateButton").addEventListener("click", applyRotation);
-document.getElementById("reflectXButton").addEventListener("click", () => applyReflection("x"));
-document.getElementById("reflectYButton").addEventListener("click", () => applyReflection("y"));
-document.getElementById("reflectXYButton").addEventListener("click", () => applyReflection("xy"));
-document.getElementById("applyClipButton").addEventListener("click", applyClip);
-document.getElementById("clearClipButton").addEventListener("click", () => {
+translateButton.addEventListener("click", applyTranslation);
+scaleButton.addEventListener("click", applyScale);
+rotateButton.addEventListener("click", applyRotation);
+reflectXButton.addEventListener("click", () => applyReflection("x"));
+reflectYButton.addEventListener("click", () => applyReflection("y"));
+reflectXYButton.addEventListener("click", () => applyReflection("xy"));
+applyClipButton.addEventListener("click", applyClip);
+clearClipButton.addEventListener("click", () => {
   state.clipWindow = null;
+  refreshDataInspector();
   render();
   setStatus("Janela de recorte removida.");
 });
-document.getElementById("deleteSelectedButton").addEventListener("click", deleteSelected);
-document.getElementById("clearCanvasButton").addEventListener("click", clearProject);
+deleteSelectedButton.addEventListener("click", deleteSelected);
+clearCanvasButton.addEventListener("click", clearProject);
+clearTraceButton.addEventListener("click", () => {
+  setAlgorithmTrace("Console limpo", ["Aguardando a criação de uma reta ou a aplicação de um recorte."]);
+});
+themeToggleButton.addEventListener("click", () => {
+  applyTheme(state.theme === "dark" ? "light" : "dark");
+});
+zoomOutButton.addEventListener("click", () => setZoom(state.zoomScale - 0.1));
+zoomResetButton.addEventListener("click", () => setZoom(0.8));
+zoomInButton.addEventListener("click", () => setZoom(state.zoomScale + 0.1));
+zoomSlider.addEventListener("input", (event) => {
+  setZoom(Number(event.target.value) / 100);
+});
+toggleDataViewButton.addEventListener("click", () => {
+  state.dataViewMode = state.dataViewMode === "selected" ? "all" : "selected";
+  refreshDataInspector();
+});
 
-canvas.width = WORLD.width * WORLD.pixelSize;
-canvas.height = WORLD.height * WORLD.pixelSize;
+workspaceSplitter.addEventListener("pointerdown", (event) => {
+  if (!workspace.classList.contains("workspace--split")) {
+    return;
+  }
+
+  event.preventDefault();
+  workspaceSplitter.setPointerCapture(event.pointerId);
+  document.body.style.userSelect = "none";
+
+  const moveHandler = (moveEvent) => {
+    const { totalAvailableWidth } = getCanvasSpaceMetrics();
+    const workspaceRect = workspace.getBoundingClientRect();
+    const pointerOffset = moveEvent.clientX - workspaceRect.left;
+    const minInspectorWidth = 320;
+    const splitterWidth = 12;
+    const splitGap = 18;
+    const maxCanvasWidth = totalAvailableWidth - minInspectorWidth - splitterWidth - splitGap;
+    const desiredCanvasWidth = Math.max(240, Math.min(maxCanvasWidth, pointerOffset - 8));
+    const nextScale = desiredCanvasWidth / totalAvailableWidth;
+    setZoom(nextScale);
+  };
+
+  const stopHandler = () => {
+    document.body.style.userSelect = "";
+    window.removeEventListener("pointermove", moveHandler);
+    window.removeEventListener("pointerup", stopHandler);
+  };
+
+  window.addEventListener("pointermove", moveHandler);
+  window.addEventListener("pointerup", stopHandler, { once: true });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (shouldIgnoreShortcut(event)) {
+    return;
+  }
+
+  const key = event.key.toLowerCase();
+
+  if (key === "delete") {
+    event.preventDefault();
+    deleteSelected();
+    return;
+  }
+
+  if (key === "enter") {
+    if (state.tool === "polygon" && state.pendingPoints.length >= 3) {
+      event.preventDefault();
+      finishPolygon();
+    }
+    return;
+  }
+
+  if (key === "escape") {
+    if (state.pendingPoints.length > 0 || state.drag) {
+      event.preventDefault();
+      cancelPending();
+    }
+    return;
+  }
+
+  const shortcutActions = {
+    p: () => setTool("point"),
+    r: () => setTool("line"),
+    c: () => setTool("circle"),
+    g: () => setTool("polygon"),
+    s: () => setTool("select"),
+    j: () => setTool("clip-window"),
+    t: () => applyTranslation(),
+    e: () => applyScale(),
+    o: () => applyRotation(),
+    x: () => applyReflection("x"),
+    y: () => applyReflection("y"),
+    b: () => applyReflection("xy"),
+    k: () => applyClip(),
+  };
+
+  const action = shortcutActions[key];
+  if (!action) {
+    return;
+  }
+
+  event.preventDefault();
+  action();
+});
+
+function configureCanvasResolution() {
+  const { totalAvailableWidth } = getCanvasSpaceMetrics();
+  const basePixelSize = Math.max(4, Math.floor(totalAvailableWidth / WORLD.width));
+  state.pixelSize = Math.max(4, Math.round(basePixelSize * state.zoomScale));
+
+  const logicalWidth = WORLD.width * state.pixelSize;
+  const logicalHeight = WORLD.height * state.pixelSize;
+  const inspectorWidth = 320;
+  const splitterWidth = 12;
+  const splitGap = 18;
+  const canSplit =
+    window.innerWidth >= 1360 &&
+    totalAvailableWidth - logicalWidth >= inspectorWidth + splitterWidth + splitGap;
+  workspace.classList.toggle("workspace--split", canSplit);
+
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(logicalWidth * devicePixelRatio);
+  canvas.height = Math.round(logicalHeight * devicePixelRatio);
+  canvas.style.width = `${logicalWidth}px`;
+  canvas.style.height = `${logicalHeight}px`;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  updateZoomLabel();
+  render();
+}
 
 updateStats();
 syncPendingButtons();
-render();
+applyTheme("light");
+configureCanvasResolution();
+refreshDataInspector();
+refreshAlgorithmTrace();
+
+window.addEventListener("resize", configureCanvasResolution);
+
+if (window.ResizeObserver) {
+  const resizeObserver = new ResizeObserver(() => configureCanvasResolution());
+  resizeObserver.observe(canvasFrame);
+}

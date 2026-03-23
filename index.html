@@ -7,22 +7,72 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <section class="page-header">
+      <div class="page-header__intro">
+        <p class="eyebrow">Computação Gráfica</p>
+        <h1>TP1 Unidade 1</h1>
+        <p class="page-header__meta">Pontifícia Universidade Católica de Minas Gerais</p>
+        <p class="page-header__meta">Campus Lourdes</p>
+        <p class="page-header__meta">Professora: Rosilane Mota</p>
+        <p class="page-header__meta">Aluno: Henrique Oliveira da Cunha Franco</p>
+        <p class="page-header__description">
+          Área de desenho baseada em pixels com rasterização, transformações 2D, seleção retangular e recorte.
+        </p>
+      </div>
+
+      <div class="page-header__shortcuts">
+        <div class="page-header__topbar">
+          <p class="page-header__shortcuts-title">Atalhos</p>
+          <div class="page-header__controls">
+            <button id="themeToggleButton" class="secondary-button">Modo escuro</button>
+          </div>
+        </div>
+        <div class="shortcut-groups">
+          <section class="shortcut-group">
+            <p class="shortcut-group__title">Ferramentas</p>
+            <div class="shortcut-grid">
+              <div class="shortcut-item"><kbd>P</kbd><span>Ponto</span></div>
+              <div class="shortcut-item"><kbd>R</kbd><span>Reta</span></div>
+              <div class="shortcut-item"><kbd>C</kbd><span>Circunferência</span></div>
+              <div class="shortcut-item"><kbd>G</kbd><span>Polígono</span></div>
+              <div class="shortcut-item"><kbd>S</kbd><span>Seleção</span></div>
+              <div class="shortcut-item"><kbd>J</kbd><span>Janela</span></div>
+            </div>
+          </section>
+
+          <section class="shortcut-group">
+            <p class="shortcut-group__title">Transformações e Recorte</p>
+            <div class="shortcut-grid">
+              <div class="shortcut-item"><kbd>T</kbd><span>Translação</span></div>
+              <div class="shortcut-item"><kbd>E</kbd><span>Escala</span></div>
+              <div class="shortcut-item"><kbd>O</kbd><span>Rotação</span></div>
+              <div class="shortcut-item"><kbd>X</kbd><span>Reflexão X</span></div>
+              <div class="shortcut-item"><kbd>Y</kbd><span>Reflexão Y</span></div>
+              <div class="shortcut-item"><kbd>B</kbd><span>Reflexão XY</span></div>
+              <div class="shortcut-item"><kbd>K</kbd><span>Aplicar recorte</span></div>
+            </div>
+          </section>
+
+          <section class="shortcut-group">
+            <p class="shortcut-group__title">Fluxo</p>
+            <div class="shortcut-grid shortcut-grid--compact">
+              <div class="shortcut-item"><kbd>Delete</kbd><span>Excluir seleção</span></div>
+              <div class="shortcut-item"><kbd>Enter</kbd><span>Finalizar polígono</span></div>
+              <div class="shortcut-item"><kbd>Esc</kbd><span>Cancelar desenho</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
-        <div class="panel brand-panel">
-          <p class="eyebrow">Computação Gráfica</p>
-          <h1>TP1 Unidade 1</h1>
-          <p class="panel-copy">
-            Área de desenho baseada em pixels com rasterização, transformações 2D, seleção retangular e recorte.
-          </p>
-        </div>
-
         <div class="panel">
           <div class="panel-heading">
             <h2>Ferramentas</h2>
@@ -156,20 +206,63 @@
             <p class="canvas-title">Área de desenho</p>
             <p class="canvas-copy">Use cliques e arrastes no canvas. A origem está no centro, com eixo Y apontando para cima.</p>
           </div>
-          <div class="coordinates">
-            <span id="cursorPosition">Cursor: (0, 0)</span>
-            <span id="selectionSummary">Selecionados: 0</span>
+          <div class="canvas-toolbar__actions">
+            <div class="zoom-controls">
+              <button id="zoomOutButton" class="secondary-button" aria-label="Reduzir canvas">-</button>
+              <input id="zoomSlider" class="zoom-slider" type="range" min="45" max="100" step="1" value="80" />
+              <button id="zoomResetButton" class="secondary-button">Reset</button>
+              <button id="zoomInButton" class="secondary-button" aria-label="Aumentar canvas">+</button>
+              <span id="zoomLevelLabel" class="zoom-label">Zoom 80%</span>
+            </div>
+            <div class="coordinates">
+              <span id="cursorPosition">Cursor: (0, 0)</span>
+              <span id="selectionSummary">Selecionados: 0</span>
+            </div>
           </div>
         </div>
 
-        <div class="canvas-frame">
-          <canvas id="drawingCanvas" width="1089" height="729"></canvas>
-        </div>
+        <div class="workspace-grid">
+          <div class="visual-column">
+            <div class="canvas-frame">
+              <canvas id="drawingCanvas" width="1089" height="729"></canvas>
+            </div>
 
-        <section class="status-panel">
-          <p class="status-title">Status</p>
-          <p id="statusMessage">Pronto para desenhar.</p>
-        </section>
+            <section class="status-panel">
+              <p class="status-title">Status</p>
+              <p id="statusMessage">Pronto para desenhar.</p>
+            </section>
+          </div>
+
+          <div id="workspaceSplitter" class="workspace-splitter" aria-hidden="true"></div>
+
+          <div class="inspector-column">
+            <section class="data-panel">
+              <div class="data-panel__header">
+                <div>
+                  <p class="status-title">Painel de Estrutura de Dados</p>
+                  <p class="data-panel__copy">Visão da estrutura interna usada pela aplicação.</p>
+                </div>
+                <div class="data-panel__actions">
+                  <button id="toggleDataViewButton" class="secondary-button">Mostrar seleção</button>
+                </div>
+              </div>
+              <pre id="dataInspector" class="data-inspector"></pre>
+            </section>
+
+            <section class="trace-panel">
+              <div class="data-panel__header">
+                <div>
+                  <p class="status-title">Rastreamento Algorítmico</p>
+                  <p class="data-panel__copy">Rastro dos cálculos aplicados pelos algoritmos.</p>
+                </div>
+                <div class="data-panel__actions">
+                  <button id="clearTraceButton" class="secondary-button">Limpar painel</button>
+                </div>
+              </div>
+              <pre id="traceInspector" class="data-inspector trace-inspector"></pre>
+            </section>
+          </div>
+        </div>
       </main>
     </div>
 
