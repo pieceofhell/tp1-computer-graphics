@@ -94,7 +94,19 @@ function clampCoord(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function sanitizeWorldPoint(point) {
+function normalizeCoord(value) {
+  const rounded = Number(value.toFixed(6));
+  return Math.abs(rounded) < 1e-6 ? 0 : rounded;
+}
+
+function clampWorldPoint(point) {
+  return {
+    x: clampCoord(normalizeCoord(point.x), -Math.floor(WORLD.width / 2), Math.floor(WORLD.width / 2)),
+    y: clampCoord(normalizeCoord(point.y), -Math.floor(WORLD.height / 2), Math.floor(WORLD.height / 2)),
+  };
+}
+
+function snapWorldPoint(point) {
   return {
     x: clampCoord(roundCoord(point.x), -Math.floor(WORLD.width / 2), Math.floor(WORLD.width / 2)),
     y: clampCoord(roundCoord(point.y), -Math.floor(WORLD.height / 2), Math.floor(WORLD.height / 2)),
@@ -281,7 +293,7 @@ function canvasToWorld(event) {
   const canvasY = (event.clientY - rect.top) * scaleY;
   const worldX = (canvasX - logicalWidth / 2) / state.pixelSize;
   const worldY = (logicalHeight / 2 - canvasY) / state.pixelSize;
-  return sanitizeWorldPoint({ x: worldX, y: worldY });
+  return snapWorldPoint({ x: worldX, y: worldY });
 }
 
 function drawPixel(point, color) {
@@ -326,22 +338,24 @@ function drawRectangleGuide(rect, color, lineDash = [8, 6]) {
 }
 
 function rasterizeLineDDA(start, end) {
+  const rasterStart = snapWorldPoint(start);
+  const rasterEnd = snapWorldPoint(end);
   const points = [];
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
+  const dx = rasterEnd.x - rasterStart.x;
+  const dy = rasterEnd.y - rasterStart.y;
   const steps = Math.max(Math.abs(dx), Math.abs(dy));
 
   if (steps === 0) {
-    return [clonePoint(start)];
+    return [clonePoint(rasterStart)];
   }
 
   const xIncrement = dx / steps;
   const yIncrement = dy / steps;
-  let x = start.x;
-  let y = start.y;
+  let x = rasterStart.x;
+  let y = rasterStart.y;
 
   for (let step = 0; step <= steps; step += 1) {
-    points.push(sanitizeWorldPoint({ x, y }));
+    points.push(snapWorldPoint({ x, y }));
     x += xIncrement;
     y += yIncrement;
   }
@@ -350,11 +364,13 @@ function rasterizeLineDDA(start, end) {
 }
 
 function rasterizeLineBresenham(start, end) {
+  const rasterStart = snapWorldPoint(start);
+  const rasterEnd = snapWorldPoint(end);
   const points = [];
-  let x1 = start.x;
-  let y1 = start.y;
-  const x2 = end.x;
-  const y2 = end.y;
+  let x1 = rasterStart.x;
+  let y1 = rasterStart.y;
+  const x2 = rasterEnd.x;
+  const y2 = rasterEnd.y;
   const dx = Math.abs(x2 - x1);
   const dy = Math.abs(y2 - y1);
   const sx = x1 < x2 ? 1 : -1;
@@ -382,6 +398,7 @@ function rasterizeLineBresenham(start, end) {
 }
 
 function rasterizeCircleBresenham(center, radius) {
+  const rasterCenter = snapWorldPoint(center);
   const points = [];
   let x = 0;
   let y = radius;
@@ -389,17 +406,17 @@ function rasterizeCircleBresenham(center, radius) {
 
   function plotSymmetric(circleX, circleY) {
     const symmetricPoints = [
-      { x: center.x + circleX, y: center.y + circleY },
-      { x: center.x - circleX, y: center.y + circleY },
-      { x: center.x + circleX, y: center.y - circleY },
-      { x: center.x - circleX, y: center.y - circleY },
-      { x: center.x + circleY, y: center.y + circleX },
-      { x: center.x - circleY, y: center.y + circleX },
-      { x: center.x + circleY, y: center.y - circleX },
-      { x: center.x - circleY, y: center.y - circleX },
+      { x: rasterCenter.x + circleX, y: rasterCenter.y + circleY },
+      { x: rasterCenter.x - circleX, y: rasterCenter.y + circleY },
+      { x: rasterCenter.x + circleX, y: rasterCenter.y - circleY },
+      { x: rasterCenter.x - circleX, y: rasterCenter.y - circleY },
+      { x: rasterCenter.x + circleY, y: rasterCenter.y + circleX },
+      { x: rasterCenter.x - circleY, y: rasterCenter.y + circleX },
+      { x: rasterCenter.x + circleY, y: rasterCenter.y - circleX },
+      { x: rasterCenter.x - circleY, y: rasterCenter.y - circleX },
     ];
 
-    points.push(...symmetricPoints.map(sanitizeWorldPoint));
+    points.push(...symmetricPoints.map(snapWorldPoint));
   }
 
   while (y >= x) {
@@ -439,26 +456,30 @@ function getLinePixels(start, end, algorithm) {
 }
 
 function buildLineRasterTrace(start, end, algorithm) {
+  const rasterStart = snapWorldPoint(start);
+  const rasterEnd = snapWorldPoint(end);
+
   if (algorithm === "dda") {
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
+    const dx = rasterEnd.x - rasterStart.x;
+    const dy = rasterEnd.y - rasterStart.y;
     const steps = Math.max(Math.abs(dx), Math.abs(dy));
     const xIncrement = steps === 0 ? 0 : dx / steps;
     const yIncrement = steps === 0 ? 0 : dy / steps;
     const pixels = rasterizeLineDDA(start, end);
     const lines = [
       "Algoritmo: DDA",
-      `Entrada: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+      `Entrada geométrica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+      `Entrada rasterizada: inicio=${formatPoint(rasterStart)} fim=${formatPoint(rasterEnd)}`,
       `dx=${dx}, dy=${dy}, steps=${steps}`,
       `xIncrement=${xIncrement.toFixed(4)}, yIncrement=${yIncrement.toFixed(4)}`,
     ];
 
-    let x = start.x;
-    let y = start.y;
+    let x = rasterStart.x;
+    let y = rasterStart.y;
     const previewSteps = Math.min(8, steps + 1);
     for (let step = 0; step < previewSteps; step += 1) {
       lines.push(
-        `passo ${step}: x=${x.toFixed(4)}, y=${y.toFixed(4)} -> pixel ${formatPoint(sanitizeWorldPoint({ x, y }))}`,
+        `passo ${step}: x=${x.toFixed(4)}, y=${y.toFixed(4)} -> pixel ${formatPoint(snapWorldPoint({ x, y }))}`,
       );
       x += xIncrement;
       y += yIncrement;
@@ -471,24 +492,25 @@ function buildLineRasterTrace(start, end, algorithm) {
     return lines;
   }
 
-  const dx = Math.abs(end.x - start.x);
-  const dy = Math.abs(end.y - start.y);
-  const sx = start.x < end.x ? 1 : -1;
-  const sy = start.y < end.y ? 1 : -1;
+  const dx = Math.abs(rasterEnd.x - rasterStart.x);
+  const dy = Math.abs(rasterEnd.y - rasterStart.y);
+  const sx = rasterStart.x < rasterEnd.x ? 1 : -1;
+  const sy = rasterStart.y < rasterEnd.y ? 1 : -1;
   let err = dx - dy;
-  let x = start.x;
-  let y = start.y;
+  let x = rasterStart.x;
+  let y = rasterStart.y;
   const pixels = rasterizeLineBresenham(start, end);
   const lines = [
     "Algoritmo: Bresenham",
-    `Entrada: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    `Entrada geométrica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    `Entrada rasterizada: inicio=${formatPoint(rasterStart)} fim=${formatPoint(rasterEnd)}`,
     `dx=${dx}, dy=${dy}, sx=${sx}, sy=${sy}, erroInicial=${err}`,
   ];
 
   for (let step = 0; step < Math.min(12, pixels.length); step += 1) {
     const e2 = err * 2;
     lines.push(`passo ${step}: pixel=(${x}, ${y}), err=${err}, e2=${e2}`);
-    if (x === end.x && y === end.y) {
+    if (x === rasterEnd.x && y === rasterEnd.y) {
       break;
     }
     if (e2 > -dy) {
@@ -511,7 +533,7 @@ function buildLineRasterTrace(start, end, algorithm) {
 function getShapePixels(shape) {
   switch (shape.type) {
     case "point":
-      return [clonePoint(shape.position)];
+      return [snapWorldPoint(shape.position)];
     case "line":
       return getLinePixels(shape.start, shape.end, shape.algorithm);
     case "circle":
@@ -636,8 +658,8 @@ function clipLineCohenSutherland(start, end, rect) {
   while (true) {
     if (!(code1 | code2)) {
       return {
-        start: sanitizeWorldPoint({ x: x1, y: y1 }),
-        end: sanitizeWorldPoint({ x: x2, y: y2 }),
+        start: clampWorldPoint({ x: x1, y: y1 }),
+        end: clampWorldPoint({ x: x2, y: y2 }),
       };
     }
 
@@ -709,8 +731,8 @@ function clipLineLiangBarsky(start, end, rect) {
   }
 
   return {
-    start: sanitizeWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
-    end: sanitizeWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
+    start: clampWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
+    end: clampWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
   };
 }
 
@@ -769,8 +791,8 @@ function traceClipLineCohenSutherland(start, end, rect) {
 
     if (!(code1 | code2)) {
       const result = {
-        start: sanitizeWorldPoint({ x: x1, y: y1 }),
-        end: sanitizeWorldPoint({ x: x2, y: y2 }),
+        start: clampWorldPoint({ x: x1, y: y1 }),
+        end: clampWorldPoint({ x: x2, y: y2 }),
       };
       lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
       return { result, lines };
@@ -870,8 +892,8 @@ function traceClipLineLiangBarsky(start, end, rect) {
   }
 
   const result = {
-    start: sanitizeWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
-    end: sanitizeWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
+    start: clampWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
+    end: clampWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
   };
   lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
   return { result, lines };
@@ -897,21 +919,23 @@ function getSelectionPivot() {
     return { x: 0, y: 0 };
   }
 
-  const points = state.shapes
-    .filter((shape) => state.selectedIds.has(shape.id))
-    .flatMap((shape) => getShapeReferencePoints(shape));
+  const selectedShapes = state.shapes.filter((shape) => state.selectedIds.has(shape.id));
+  const bounds = selectedShapes
+    .map((shape) => getShapeBounds(shape))
+    .filter(Boolean)
+    .reduce(
+      (accumulator, bound) => ({
+        minX: Math.min(accumulator.minX, bound.minX),
+        maxX: Math.max(accumulator.maxX, bound.maxX),
+        minY: Math.min(accumulator.minY, bound.minY),
+        maxY: Math.max(accumulator.maxY, bound.maxY),
+      }),
+      { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
+    );
 
-  const total = points.reduce(
-    (accumulator, point) => ({
-      x: accumulator.x + point.x,
-      y: accumulator.y + point.y,
-    }),
-    { x: 0, y: 0 },
-  );
-
-  return sanitizeWorldPoint({
-    x: total.x / points.length,
-    y: total.y / points.length,
+  return clampWorldPoint({
+    x: (bounds.minX + bounds.maxX) / 2,
+    y: (bounds.minY + bounds.maxY) / 2,
   });
 }
 
@@ -920,7 +944,7 @@ function transformPoint(point, matrix, pivot) {
   const translatedY = point.y - pivot.y;
   const transformedX = matrix[0][0] * translatedX + matrix[0][1] * translatedY + pivot.x;
   const transformedY = matrix[1][0] * translatedX + matrix[1][1] * translatedY + pivot.y;
-  return sanitizeWorldPoint({ x: transformedX, y: transformedY });
+  return clampWorldPoint({ x: transformedX, y: transformedY });
 }
 
 function getUniformScaleFromMatrix(matrix) {
@@ -964,19 +988,19 @@ function applyTranslation() {
   const count = applyToSelectedShapes((shape) => {
     switch (shape.type) {
       case "point":
-        return { ...shape, position: sanitizeWorldPoint({ x: shape.position.x + tx, y: shape.position.y + ty }) };
+        return { ...shape, position: clampWorldPoint({ x: shape.position.x + tx, y: shape.position.y + ty }) };
       case "line":
         return {
           ...shape,
-          start: sanitizeWorldPoint({ x: shape.start.x + tx, y: shape.start.y + ty }),
-          end: sanitizeWorldPoint({ x: shape.end.x + tx, y: shape.end.y + ty }),
+          start: clampWorldPoint({ x: shape.start.x + tx, y: shape.start.y + ty }),
+          end: clampWorldPoint({ x: shape.end.x + tx, y: shape.end.y + ty }),
         };
       case "circle":
-        return { ...shape, center: sanitizeWorldPoint({ x: shape.center.x + tx, y: shape.center.y + ty }) };
+        return { ...shape, center: clampWorldPoint({ x: shape.center.x + tx, y: shape.center.y + ty }) };
       case "polygon":
         return {
           ...shape,
-          vertices: shape.vertices.map((vertex) => sanitizeWorldPoint({ x: vertex.x + tx, y: vertex.y + ty })),
+          vertices: shape.vertices.map((vertex) => clampWorldPoint({ x: vertex.x + tx, y: vertex.y + ty })),
         };
       default:
         return shape;
