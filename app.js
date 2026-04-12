@@ -714,6 +714,41 @@ function clipLineLiangBarsky(start, end, rect) {
   };
 }
 
+function clipLineWithTrace(start, end, rect, algorithm) {
+  return algorithm === "cohen"
+    ? traceClipLineCohenSutherland(start, end, rect)
+    : traceClipLineLiangBarsky(start, end, rect);
+}
+
+function clipPolygonEdges(shape, rect, algorithm) {
+  const replacementShapes = [];
+  const traceSections = [`Polígono ${shape.id}`, `Algoritmo de recorte: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`];
+
+  for (let index = 0; index < shape.vertices.length; index += 1) {
+    const start = shape.vertices[index];
+    const end = shape.vertices[(index + 1) % shape.vertices.length];
+    const trace = clipLineWithTrace(start, end, rect, algorithm);
+    traceSections.push("");
+    traceSections.push(`Aresta ${index + 1}: ${formatPoint(start)} -> ${formatPoint(end)}`);
+    traceSections.push(...trace.lines);
+
+    if (trace.result) {
+      replacementShapes.push({
+        id: state.nextId++,
+        type: "line",
+        start: trace.result.start,
+        end: trace.result.end,
+        algorithm: shape.algorithm || "bresenham",
+      });
+    }
+  }
+
+  return {
+    replacementShapes,
+    traceLines: traceSections,
+  };
+}
+
 function traceClipLineCohenSutherland(start, end, rect) {
   let x1 = start.x;
   let y1 = start.y;
@@ -1058,7 +1093,7 @@ function applyClip() {
   }
 
   if (state.selectedIds.size === 0) {
-    setStatus("Selecione ao menos uma reta antes de aplicar o recorte.");
+    setStatus("Selecione ao menos uma reta ou polígono antes de aplicar o recorte.");
     return;
   }
 
@@ -1066,6 +1101,7 @@ function applyClip() {
   let clipped = 0;
   let removed = 0;
   let ignored = 0;
+  let generatedSegments = 0;
   const traceBlocks = [];
 
   state.shapes = state.shapes.flatMap((shape) => {
@@ -1073,35 +1109,53 @@ function applyClip() {
       return [shape];
     }
 
-    if (shape.type !== "line") {
+    if (shape.type === "line") {
+      const trace = clipLineWithTrace(shape.start, shape.end, state.clipWindow, algorithm);
+      traceBlocks.push(`Linha ${shape.id}\n${trace.lines.join("\n")}`);
+
+      if (!trace.result) {
+        removed += 1;
+        state.selectedIds.delete(shape.id);
+        return [];
+      }
+
+      clipped += 1;
+      return [{ ...shape, start: trace.result.start, end: trace.result.end }];
+    }
+
+    if (shape.type === "polygon") {
+      const { replacementShapes, traceLines } = clipPolygonEdges(shape, state.clipWindow, algorithm);
+      traceBlocks.push(traceLines.join("\n"));
+      state.selectedIds.delete(shape.id);
+
+      if (replacementShapes.length === 0) {
+        removed += 1;
+        return [];
+      }
+
+      clipped += 1;
+      generatedSegments += replacementShapes.length;
+      replacementShapes.forEach((replacementShape) => state.selectedIds.add(replacementShape.id));
+      return replacementShapes;
+    }
+
+    if (shape.type !== "line" && shape.type !== "polygon") {
       ignored += 1;
       return [shape];
     }
-
-    const trace = algorithm === "cohen"
-      ? traceClipLineCohenSutherland(shape.start, shape.end, state.clipWindow)
-      : traceClipLineLiangBarsky(shape.start, shape.end, state.clipWindow);
-    traceBlocks.push(`Linha ${shape.id}\n${trace.lines.join("\n")}`);
-
-    if (!trace.result) {
-      removed += 1;
-      state.selectedIds.delete(shape.id);
-      return [];
-    }
-
-    clipped += 1;
-    return [{ ...shape, start: trace.result.start, end: trace.result.end }];
   });
 
   updateStats();
   refreshDataInspector();
   setAlgorithmTrace(
     `Recorte por ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
-    traceBlocks.length > 0 ? traceBlocks.join("\n\n----------------\n\n").split("\n") : ["Nenhuma reta foi processada."],
+    traceBlocks.length > 0
+      ? traceBlocks.join("\n\n----------------\n\n").split("\n")
+      : ["Nenhuma reta ou polígono foi processado."],
   );
   render();
   setStatus(
-    `Recorte ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}: ${clipped} reta(s) ajustada(s), ${removed} removida(s), ${ignored} elemento(s) ignorado(s).`,
+    `Recorte ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}: ${clipped} elemento(s) processado(s), ${generatedSegments} segmento(s) gerado(s), ${removed} removido(s), ${ignored} ignorado(s).`,
   );
 }
 
