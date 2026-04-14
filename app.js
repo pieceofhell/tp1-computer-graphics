@@ -742,32 +742,167 @@ function clipLineWithTrace(start, end, rect, algorithm) {
     : traceClipLineLiangBarsky(start, end, rect);
 }
 
-function clipPolygonEdges(shape, rect, algorithm) {
-  const replacementShapes = [];
-  const traceSections = [`Polígono ${shape.id}`, `Algoritmo de recorte: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`];
+function pointsAlmostEqual(first, second, epsilon = 1e-6) {
+  return Math.abs(first.x - second.x) <= epsilon && Math.abs(first.y - second.y) <= epsilon;
+}
 
-  for (let index = 0; index < shape.vertices.length; index += 1) {
-    const start = shape.vertices[index];
-    const end = shape.vertices[(index + 1) % shape.vertices.length];
-    const trace = clipLineWithTrace(start, end, rect, algorithm);
-    traceSections.push("");
-    traceSections.push(`Aresta ${index + 1}: ${formatPoint(start)} -> ${formatPoint(end)}`);
-    traceSections.push(...trace.lines);
+function dedupePolygonVertices(vertices) {
+  const cleaned = [];
 
-    if (trace.result) {
-      replacementShapes.push({
-        id: state.nextId++,
-        type: "line",
-        start: trace.result.start,
-        end: trace.result.end,
-        algorithm: shape.algorithm || "bresenham",
-      });
+  vertices.forEach((vertex) => {
+    const normalized = clampWorldPoint(vertex);
+    const previous = cleaned[cleaned.length - 1];
+    if (!previous || !pointsAlmostEqual(previous, normalized)) {
+      cleaned.push(normalized);
     }
+  });
+
+  if (cleaned.length > 1 && pointsAlmostEqual(cleaned[0], cleaned[cleaned.length - 1])) {
+    cleaned.pop();
   }
 
+  return cleaned;
+}
+
+function intersectSegmentWithBoundary(start, end, boundary, rect) {
+  if (boundary.axis === "x") {
+    const boundaryValue = rect[boundary.key];
+    const deltaX = end.x - start.x;
+
+    if (Math.abs(deltaX) < 1e-6) {
+      return clampWorldPoint({ x: boundaryValue, y: start.y });
+    }
+
+    const factor = (boundaryValue - start.x) / deltaX;
+    return clampWorldPoint({
+      x: boundaryValue,
+      y: start.y + factor * (end.y - start.y),
+    });
+  }
+
+  const boundaryValue = rect[boundary.key];
+  const deltaY = end.y - start.y;
+
+  if (Math.abs(deltaY) < 1e-6) {
+    return clampWorldPoint({ x: start.x, y: boundaryValue });
+  }
+
+  const factor = (boundaryValue - start.y) / deltaY;
+  return clampWorldPoint({
+    x: start.x + factor * (end.x - start.x),
+    y: boundaryValue,
+  });
+}
+
+function clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines) {
+  if (vertices.length === 0) {
+    return [];
+  }
+
+  const output = [];
+  let start = vertices[vertices.length - 1];
+
+  vertices.forEach((end) => {
+    const startInside = boundary.isInside(start, rect);
+    const endInside = boundary.isInside(end, rect);
+
+    if (startInside && endInside) {
+      output.push(clonePoint(end));
+      traceLines.push(
+        `${formatPoint(start)} -> ${formatPoint(end)} permanece na região da borda ${boundary.name}.`,
+      );
+    } else if (startInside && !endInside) {
+      const intersection = intersectSegmentWithBoundary(start, end, boundary, rect);
+      output.push(intersection);
+      traceLines.push(
+        `${formatPoint(start)} -> ${formatPoint(end)} sai pela borda ${boundary.name} em ${formatPoint(intersection)}.`,
+      );
+    } else if (!startInside && endInside) {
+      const intersection = intersectSegmentWithBoundary(start, end, boundary, rect);
+      output.push(intersection, clonePoint(end));
+      traceLines.push(
+        `${formatPoint(start)} -> ${formatPoint(end)} entra pela borda ${boundary.name} em ${formatPoint(intersection)}.`,
+      );
+    } else {
+      traceLines.push(
+        `${formatPoint(start)} -> ${formatPoint(end)} permanece fora da borda ${boundary.name}.`,
+      );
+    }
+
+    start = end;
+  });
+
+  return dedupePolygonVertices(output);
+}
+
+function clipPolygonShape(shape, rect, algorithm) {
+  const boundaries = [
+    { name: "esquerda", axis: "x", key: "minX", isInside: (point, clipRect) => point.x >= clipRect.minX },
+    { name: "direita", axis: "x", key: "maxX", isInside: (point, clipRect) => point.x <= clipRect.maxX },
+    { name: "base", axis: "y", key: "minY", isInside: (point, clipRect) => point.y >= clipRect.minY },
+    { name: "topo", axis: "y", key: "maxY", isInside: (point, clipRect) => point.y <= clipRect.maxY },
+  ];
+
+  const traceLines = [
+    `Polígono ${shape.id}`,
+    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    `Reconstrução do contorno recortado contra a janela retangular.`,
+    `Algoritmo selecionado para retas: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
+    `Vértices iniciais: ${shape.vertices.map(formatPoint).join(" -> ")}`,
+  ];
+
+  let vertices = dedupePolygonVertices(shape.vertices.map(clonePoint));
+
+  boundaries.forEach((boundary) => {
+    traceLines.push("");
+    traceLines.push(`Recorte contra a borda ${boundary.name}: ${vertices.length} vértice(s) de entrada.`);
+    vertices = clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines);
+    traceLines.push(`Saída da borda ${boundary.name}: ${vertices.length} vértice(s).`);
+  });
+
+  vertices = dedupePolygonVertices(vertices);
+
+  if (vertices.length >= 3) {
+    traceLines.push(`Resultado final: polígono com ${vertices.length} vértice(s).`);
+    return {
+      replacementShape: {
+        ...shape,
+        vertices,
+      },
+      traceLines,
+    };
+  }
+
+  if (vertices.length === 2) {
+    traceLines.push("Resultado final degenerado: o recorte gerou apenas um segmento.");
+    return {
+      replacementShape: {
+        id: shape.id,
+        type: "line",
+        start: vertices[0],
+        end: vertices[1],
+        algorithm: shape.algorithm || "bresenham",
+      },
+      traceLines,
+    };
+  }
+
+  if (vertices.length === 1) {
+    traceLines.push("Resultado final degenerado: o recorte gerou apenas um ponto.");
+    return {
+      replacementShape: {
+        id: shape.id,
+        type: "point",
+        position: vertices[0],
+      },
+      traceLines,
+    };
+  }
+
+  traceLines.push("Resultado final: polígono totalmente removido pela janela de recorte.");
   return {
-    replacementShapes,
-    traceLines: traceSections,
+    replacementShape: null,
+    traceLines,
   };
 }
 
@@ -1148,19 +1283,21 @@ function applyClip() {
     }
 
     if (shape.type === "polygon") {
-      const { replacementShapes, traceLines } = clipPolygonEdges(shape, state.clipWindow, algorithm);
+      const { replacementShape, traceLines } = clipPolygonShape(shape, state.clipWindow, algorithm);
       traceBlocks.push(traceLines.join("\n"));
       state.selectedIds.delete(shape.id);
 
-      if (replacementShapes.length === 0) {
+      if (!replacementShape) {
         removed += 1;
         return [];
       }
 
       clipped += 1;
-      generatedSegments += replacementShapes.length;
-      replacementShapes.forEach((replacementShape) => state.selectedIds.add(replacementShape.id));
-      return replacementShapes;
+      if (replacementShape.type === "line") {
+        generatedSegments += 1;
+      }
+      state.selectedIds.add(replacementShape.id);
+      return [replacementShape];
     }
 
     if (shape.type !== "line" && shape.type !== "polygon") {
