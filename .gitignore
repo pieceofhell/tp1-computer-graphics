@@ -11,3 +11,5 @@ build/
 coverage/
 
 *.log
+/action-e2e-prototype
+/outputs

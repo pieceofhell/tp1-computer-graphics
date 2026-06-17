@@ -1,4 +1,4 @@
-const WORLD = {
+﻿const WORLD = {
   width: 121,
   height: 81,
   pixelSize: 9,
@@ -9,6 +9,8 @@ const COLORS = {
   line: "#0f766e",
   polygon: "#235789",
   circle: "#7b8c2f",
+  hermite: "#7c3aed",
+  bezier: "#2563eb",
   selected: "#f59e0b",
   pending: "#b45309",
   clipWindow: "#c2552d",
@@ -59,6 +61,7 @@ const statusMessage = document.getElementById("statusMessage");
 const dataInspector = document.getElementById("dataInspector");
 const traceInspector = document.getElementById("traceInspector");
 
+// Estado central da interface e da geometria do projeto.
 const state = {
   tool: "point",
   shapes: [],
@@ -73,19 +76,23 @@ const state = {
   theme: "light",
   algorithmTrace: {
     title: "Console iniciado",
-    lines: ["Aguardando a criação de uma reta ou a aplicação de um recorte."],
+    lines: ["Aguardando a criaÃ§Ã£o de uma reta ou a aplicaÃ§Ã£o de um recorte."],
   },
 };
 
 const toolNames = {
   point: "Ponto",
   line: "Reta",
-  circle: "Circunferência",
-  polygon: "Polígono",
-  select: "Seleção",
+  circle: "Circunferencia",
+  polygon: "Poligono",
+  hermite: "Hermite",
+  bezier: "Bezier",
+  select: "Selecao",
   "clip-window": "Janela de recorte",
 };
 
+// PrecisÃ£o geomÃ©trica e grade de pixels sÃ£o tratadas separadamente:
+// transformaÃ§Ãµes mantÃªm decimais, enquanto a rasterizaÃ§Ã£o faz o snap para inteiros.
 function roundCoord(value) {
   return Math.round(value);
 }
@@ -145,6 +152,7 @@ function updateZoomLabel() {
   zoomSlider.value = String(Math.round(state.zoomScale * 100));
 }
 
+// Serializa as estruturas para o painel de inspeÃ§Ã£o sem expor referÃªncias mutÃ¡veis.
 function serializeShape(shape) {
   switch (shape.type) {
     case "point":
@@ -174,6 +182,28 @@ function serializeShape(shape) {
         type: shape.type,
         algorithm: shape.algorithm,
         vertices: shape.vertices.map(clonePoint),
+      };
+    case "hermite":
+      return {
+        id: shape.id,
+        type: shape.type,
+        algorithm: shape.algorithm,
+        start: clonePoint(shape.start),
+        end: clonePoint(shape.end),
+        tangentStart: clonePoint(shape.tangentStart),
+        tangentEnd: clonePoint(shape.tangentEnd),
+        samples: getCurveSampleCount([shape.start, shape.tangentStart, shape.end, shape.tangentEnd]),
+      };
+    case "bezier":
+      return {
+        id: shape.id,
+        type: shape.type,
+        algorithm: shape.algorithm,
+        start: clonePoint(shape.start),
+        control1: clonePoint(shape.control1),
+        control2: clonePoint(shape.control2),
+        end: clonePoint(shape.end),
+        samples: getCurveSampleCount([shape.start, shape.control1, shape.control2, shape.end]),
       };
     default:
       return { id: shape.id, type: shape.type };
@@ -208,14 +238,16 @@ function refreshDataInspector() {
 
   dataInspector.textContent = JSON.stringify(inspectorPayload, null, 2);
   toggleDataViewButton.textContent =
-    state.dataViewMode === "selected" ? "Mostrar tudo" : "Mostrar seleção";
+    state.dataViewMode === "selected" ? "Mostrar tudo" : "Mostrar seleÃ§Ã£o";
 }
 
 function createShape(shape) {
-  state.shapes.push({ ...shape, id: state.nextId++ });
+  const createdShape = { ...shape, id: state.nextId++ };
+  state.shapes.push(createdShape);
   updateStats();
   refreshDataInspector();
   render();
+  return createdShape;
 }
 
 function setStatus(message) {
@@ -233,6 +265,16 @@ function setTool(tool) {
   syncPendingButtons();
   refreshDataInspector();
   render();
+  if (tool === "hermite") {
+    setStatus("Ferramenta ativa: Hermite. Clique em ponto inicial, ponto final, controle da tangente inicial e controle da tangente final.");
+    return;
+  }
+
+  if (tool === "bezier") {
+    setStatus("Ferramenta ativa: Bezier. Clique em P0, P1, P2 e P3 para definir a curva.");
+    return;
+  }
+
   setStatus(`Ferramenta ativa: ${toolNames[tool]}.`);
 }
 
@@ -337,6 +379,7 @@ function drawRectangleGuide(rect, color, lineDash = [8, 6]) {
   ctx.restore();
 }
 
+// DDA percorre o segmento por incrementos constantes em x e y.
 function rasterizeLineDDA(start, end) {
   const rasterStart = snapWorldPoint(start);
   const rasterEnd = snapWorldPoint(end);
@@ -363,6 +406,7 @@ function rasterizeLineDDA(start, end) {
   return dedupePoints(points);
 }
 
+// Bresenham trabalha com erro incremental inteiro para escolher o prÃ³ximo pixel.
 function rasterizeLineBresenham(start, end) {
   const rasterStart = snapWorldPoint(start);
   const rasterEnd = snapWorldPoint(end);
@@ -397,6 +441,7 @@ function rasterizeLineBresenham(start, end) {
   return dedupePoints(points);
 }
 
+// A circunferÃªncia Ã© construÃ­da por simetria a partir de um Ãºnico octante.
 function rasterizeCircleBresenham(center, radius) {
   const rasterCenter = snapWorldPoint(center);
   const points = [];
@@ -455,6 +500,8 @@ function getLinePixels(start, end, algorithm) {
     : rasterizeLineBresenham(start, end);
 }
 
+// Esse rastreamento existe para a apresentaÃ§Ã£o acadÃªmica e para depuraÃ§Ã£o visual
+// dos passos mais importantes da rasterizaÃ§Ã£o.
 function buildLineRasterTrace(start, end, algorithm) {
   const rasterStart = snapWorldPoint(start);
   const rasterEnd = snapWorldPoint(end);
@@ -468,7 +515,7 @@ function buildLineRasterTrace(start, end, algorithm) {
     const pixels = rasterizeLineDDA(start, end);
     const lines = [
       "Algoritmo: DDA",
-      `Entrada geométrica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+      `Entrada geomÃ©trica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
       `Entrada rasterizada: inicio=${formatPoint(rasterStart)} fim=${formatPoint(rasterEnd)}`,
       `dx=${dx}, dy=${dy}, steps=${steps}`,
       `xIncrement=${xIncrement.toFixed(4)}, yIncrement=${yIncrement.toFixed(4)}`,
@@ -502,7 +549,7 @@ function buildLineRasterTrace(start, end, algorithm) {
   const pixels = rasterizeLineBresenham(start, end);
   const lines = [
     "Algoritmo: Bresenham",
-    `Entrada geométrica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    `Entrada geomÃ©trica: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
     `Entrada rasterizada: inicio=${formatPoint(rasterStart)} fim=${formatPoint(rasterEnd)}`,
     `dx=${dx}, dy=${dy}, sx=${sx}, sy=${sy}, erroInicial=${err}`,
   ];
@@ -530,6 +577,150 @@ function buildLineRasterTrace(start, end, algorithm) {
   return lines;
 }
 
+// Curvas sao avaliadas em amostras parametricas e rasterizadas como polilinhas
+// usando o algoritmo de retas escolhido pelo usuario no momento da criacao.
+function getCurveSampleCount(referencePoints) {
+  let guideLength = 0;
+
+  for (let index = 0; index < referencePoints.length - 1; index += 1) {
+    guideLength += Math.hypot(
+      referencePoints[index + 1].x - referencePoints[index].x,
+      referencePoints[index + 1].y - referencePoints[index].y,
+    );
+  }
+
+  return Math.max(24, Math.min(180, Math.ceil(guideLength * 2.2)));
+}
+
+// Bezier cubica nas bases de Bernstein.
+function evaluateBezierPoint(shape, t) {
+  const oneMinusT = 1 - t;
+  const basis0 = oneMinusT ** 3;
+  const basis1 = 3 * oneMinusT * oneMinusT * t;
+  const basis2 = 3 * oneMinusT * t * t;
+  const basis3 = t ** 3;
+
+  return clampWorldPoint({
+    x:
+      basis0 * shape.start.x +
+      basis1 * shape.control1.x +
+      basis2 * shape.control2.x +
+      basis3 * shape.end.x,
+    y:
+      basis0 * shape.start.y +
+      basis1 * shape.control1.y +
+      basis2 * shape.control2.y +
+      basis3 * shape.end.y,
+  });
+}
+
+// Hermite cubica usando pontos extremos e vetores tangentes derivados dos handles.
+function evaluateHermitePoint(shape, t) {
+  const tangentStart = {
+    x: shape.tangentStart.x - shape.start.x,
+    y: shape.tangentStart.y - shape.start.y,
+  };
+  const tangentEnd = {
+    x: shape.tangentEnd.x - shape.end.x,
+    y: shape.tangentEnd.y - shape.end.y,
+  };
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+
+  return clampWorldPoint({
+    x:
+      h00 * shape.start.x +
+      h10 * tangentStart.x +
+      h01 * shape.end.x +
+      h11 * tangentEnd.x,
+    y:
+      h00 * shape.start.y +
+      h10 * tangentStart.y +
+      h01 * shape.end.y +
+      h11 * tangentEnd.y,
+  });
+}
+
+function getCurveSamplePoints(shape) {
+  const referencePoints = getShapeReferencePoints(shape);
+  const samples = getCurveSampleCount(referencePoints);
+  const points = [];
+
+  for (let index = 0; index <= samples; index += 1) {
+    const t = index / samples;
+    points.push(
+      shape.type === "hermite"
+        ? evaluateHermitePoint(shape, t)
+        : evaluateBezierPoint(shape, t),
+    );
+  }
+
+  return dedupePolygonVertices(points);
+}
+
+function getCurvePixels(shape) {
+  const samplePoints = getCurveSamplePoints(shape);
+  const pixels = [];
+
+  for (let index = 0; index < samplePoints.length - 1; index += 1) {
+    pixels.push(...getLinePixels(samplePoints[index], samplePoints[index + 1], shape.algorithm));
+  }
+
+  return dedupePoints(pixels);
+}
+
+function buildCurveTrace(shape) {
+  const samples = getCurveSamplePoints(shape);
+  const previewPoints = samples.slice(0, 6);
+  const lines = [
+    `Tipo: ${shape.type === "hermite" ? "Curva de Hermite" : "Curva de Bezier"}`,
+    `Rasterizacao dos trechos: ${shape.algorithm.toUpperCase()}`,
+    `Amostras calculadas: ${samples.length}`,
+  ];
+
+  if (shape.type === "hermite") {
+    lines.push(`P0=${formatPoint(shape.start)} P1=${formatPoint(shape.end)}`);
+    lines.push(`T0=${formatPoint(shape.tangentStart)} T1=${formatPoint(shape.tangentEnd)}`);
+  } else {
+    lines.push(`P0=${formatPoint(shape.start)} P1=${formatPoint(shape.control1)}`);
+    lines.push(`P2=${formatPoint(shape.control2)} P3=${formatPoint(shape.end)}`);
+  }
+
+  previewPoints.forEach((point, index) => {
+    lines.push(`amostra ${index}: ${formatPoint(point)}`);
+  });
+
+  if (samples.length > previewPoints.length) {
+    lines.push(`... ${samples.length - previewPoints.length} amostra(s) omitida(s)`);
+  }
+
+  return lines;
+}
+
+function getCurveGuideSegments(shape) {
+  if (shape.type === "hermite") {
+    return [
+      [shape.start, shape.end],
+      [shape.start, shape.tangentStart],
+      [shape.end, shape.tangentEnd],
+    ];
+  }
+
+  if (shape.type === "bezier") {
+    return [
+      [shape.start, shape.control1],
+      [shape.control1, shape.control2],
+      [shape.control2, shape.end],
+    ];
+  }
+
+  return [];
+}
+
 function getShapePixels(shape) {
   switch (shape.type) {
     case "point":
@@ -547,11 +738,15 @@ function getShapePixels(shape) {
       }
       return dedupePoints(pixels);
     }
+    case "hermite":
+    case "bezier":
+      return getCurvePixels(shape);
     default:
       return [];
   }
 }
 
+// Bounding boxes apoiam seleÃ§Ã£o, interseÃ§Ãµes rÃ¡pidas e cÃ¡lculo de pivÃ´.
 function getBoundingBox(points) {
   return points.reduce(
     (bounds, point) => ({
@@ -579,6 +774,9 @@ function getShapeBounds(shape) {
       };
     case "polygon":
       return getBoundingBox(shape.vertices);
+    case "hermite":
+    case "bezier":
+      return getBoundingBox(getCurveSamplePoints(shape));
     default:
       return null;
   }
@@ -619,6 +817,10 @@ function isShapeInsideRect(shape, rect) {
     return shape.vertices.some((vertex) => pointInsideRect(vertex, rect)) || boundsIntersect(getShapeBounds(shape), rect);
   }
 
+  if (shape.type === "hermite" || shape.type === "bezier") {
+    return getShapePixels(shape).some((point) => pointInsideRect(point, rect)) || boundsIntersect(getShapeBounds(shape), rect);
+  }
+
   return false;
 }
 
@@ -647,6 +849,8 @@ function getOutCode(point, rect) {
   return code;
 }
 
+// Cohen-Sutherland usa cÃ³digos de regiÃ£o para aceitar, rejeitar
+// ou recalcular os extremos do segmento visÃ­vel.
 function clipLineCohenSutherland(start, end, rect) {
   let x1 = start.x;
   let y1 = start.y;
@@ -697,6 +901,8 @@ function clipLineCohenSutherland(start, end, rect) {
   }
 }
 
+// Liang-Barsky usa a forma paramÃ©trica da reta para descobrir
+// o intervalo interno vÃ¡lido dentro da janela.
 function clipLineLiangBarsky(start, end, rect) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -742,6 +948,8 @@ function clipLineWithTrace(start, end, rect, algorithm) {
     : traceClipLineLiangBarsky(start, end, rect);
 }
 
+// InterseÃ§Ãµes sucessivas podem produzir vÃ©rtices quase iguais numericamente;
+// estes utilitÃ¡rios evitam duplicidades no polÃ­gono resultante.
 function pointsAlmostEqual(first, second, epsilon = 1e-6) {
   return Math.abs(first.x - second.x) <= epsilon && Math.abs(first.y - second.y) <= epsilon;
 }
@@ -809,7 +1017,7 @@ function clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines) {
     if (startInside && endInside) {
       output.push(clonePoint(end));
       traceLines.push(
-        `${formatPoint(start)} -> ${formatPoint(end)} permanece na região da borda ${boundary.name}.`,
+        `${formatPoint(start)} -> ${formatPoint(end)} permanece na regiÃ£o da borda ${boundary.name}.`,
       );
     } else if (startInside && !endInside) {
       const intersection = intersectSegmentWithBoundary(start, end, boundary, rect);
@@ -835,6 +1043,8 @@ function clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines) {
   return dedupePolygonVertices(output);
 }
 
+// O recorte de polÃ­gono reconstrÃ³i uma nova figura fechada contra as quatro bordas
+// da janela, em vez de apenas manter arestas independentes.
 function clipPolygonShape(shape, rect, algorithm) {
   const boundaries = [
     { name: "esquerda", axis: "x", key: "minX", isInside: (point, clipRect) => point.x >= clipRect.minX },
@@ -844,26 +1054,26 @@ function clipPolygonShape(shape, rect, algorithm) {
   ];
 
   const traceLines = [
-    `Polígono ${shape.id}`,
+    `PolÃ­gono ${shape.id}`,
     `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
-    `Reconstrução do contorno recortado contra a janela retangular.`,
+    `ReconstruÃ§Ã£o do contorno recortado contra a janela retangular.`,
     `Algoritmo selecionado para retas: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
-    `Vértices iniciais: ${shape.vertices.map(formatPoint).join(" -> ")}`,
+    `VÃ©rtices iniciais: ${shape.vertices.map(formatPoint).join(" -> ")}`,
   ];
 
   let vertices = dedupePolygonVertices(shape.vertices.map(clonePoint));
 
   boundaries.forEach((boundary) => {
     traceLines.push("");
-    traceLines.push(`Recorte contra a borda ${boundary.name}: ${vertices.length} vértice(s) de entrada.`);
+    traceLines.push(`Recorte contra a borda ${boundary.name}: ${vertices.length} vÃ©rtice(s) de entrada.`);
     vertices = clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines);
-    traceLines.push(`Saída da borda ${boundary.name}: ${vertices.length} vértice(s).`);
+    traceLines.push(`SaÃ­da da borda ${boundary.name}: ${vertices.length} vÃ©rtice(s).`);
   });
 
   vertices = dedupePolygonVertices(vertices);
 
   if (vertices.length >= 3) {
-    traceLines.push(`Resultado final: polígono com ${vertices.length} vértice(s).`);
+    traceLines.push(`Resultado final: polÃ­gono com ${vertices.length} vÃ©rtice(s).`);
     return {
       replacementShape: {
         ...shape,
@@ -899,7 +1109,7 @@ function clipPolygonShape(shape, rect, algorithm) {
     };
   }
 
-  traceLines.push("Resultado final: polígono totalmente removido pela janela de recorte.");
+  traceLines.push("Resultado final: polÃ­gono totalmente removido pela janela de recorte.");
   return {
     replacementShape: null,
     traceLines,
@@ -1044,6 +1254,10 @@ function getShapeReferencePoints(shape) {
       return [shape.center];
     case "polygon":
       return shape.vertices;
+    case "hermite":
+      return [shape.start, shape.tangentStart, shape.end, shape.tangentEnd];
+    case "bezier":
+      return [shape.start, shape.control1, shape.control2, shape.end];
     default:
       return [];
   }
@@ -1074,6 +1288,8 @@ function getSelectionPivot() {
   });
 }
 
+// Toda transformaÃ§Ã£o linear Ã© aplicada em torno do pivÃ´ atual
+// sem quantizar a geometria antes da renderizaÃ§Ã£o.
 function transformPoint(point, matrix, pivot) {
   const translatedX = point.x - pivot.x;
   const translatedY = point.y - pivot.y;
@@ -1108,7 +1324,7 @@ function applyToSelectedShapes(transformer) {
 
 function applyTranslation() {
   if (state.selectedIds.size === 0) {
-    setStatus("Selecione ao menos um elemento antes de aplicar a translação.");
+    setStatus("Selecione ao menos um elemento antes de aplicar a translaÃ§Ã£o.");
     return;
   }
 
@@ -1116,7 +1332,7 @@ function applyTranslation() {
   const ty = Number(translateYInput.value);
 
   if (Number.isNaN(tx) || Number.isNaN(ty)) {
-    setStatus("Informe valores numéricos válidos para a translação.");
+    setStatus("Informe valores numÃ©ricos vÃ¡lidos para a translaÃ§Ã£o.");
     return;
   }
 
@@ -1137,12 +1353,28 @@ function applyTranslation() {
           ...shape,
           vertices: shape.vertices.map((vertex) => clampWorldPoint({ x: vertex.x + tx, y: vertex.y + ty })),
         };
+      case "hermite":
+        return {
+          ...shape,
+          start: clampWorldPoint({ x: shape.start.x + tx, y: shape.start.y + ty }),
+          end: clampWorldPoint({ x: shape.end.x + tx, y: shape.end.y + ty }),
+          tangentStart: clampWorldPoint({ x: shape.tangentStart.x + tx, y: shape.tangentStart.y + ty }),
+          tangentEnd: clampWorldPoint({ x: shape.tangentEnd.x + tx, y: shape.tangentEnd.y + ty }),
+        };
+      case "bezier":
+        return {
+          ...shape,
+          start: clampWorldPoint({ x: shape.start.x + tx, y: shape.start.y + ty }),
+          control1: clampWorldPoint({ x: shape.control1.x + tx, y: shape.control1.y + ty }),
+          control2: clampWorldPoint({ x: shape.control2.x + tx, y: shape.control2.y + ty }),
+          end: clampWorldPoint({ x: shape.end.x + tx, y: shape.end.y + ty }),
+        };
       default:
         return shape;
     }
   });
 
-  setStatus(`Translação aplicada em ${count} elemento(s): Δx=${tx}, Δy=${ty}.`);
+  setStatus(`TranslaÃ§Ã£o aplicada em ${count} elemento(s): Î”x=${tx}, Î”y=${ty}.`);
 }
 
 function applyLinearTransform(matrix, label) {
@@ -1173,12 +1405,28 @@ function applyLinearTransform(matrix, label) {
           ...shape,
           vertices: shape.vertices.map((vertex) => transformPoint(vertex, matrix, pivot)),
         };
+      case "hermite":
+        return {
+          ...shape,
+          start: transformPoint(shape.start, matrix, pivot),
+          end: transformPoint(shape.end, matrix, pivot),
+          tangentStart: transformPoint(shape.tangentStart, matrix, pivot),
+          tangentEnd: transformPoint(shape.tangentEnd, matrix, pivot),
+        };
+      case "bezier":
+        return {
+          ...shape,
+          start: transformPoint(shape.start, matrix, pivot),
+          control1: transformPoint(shape.control1, matrix, pivot),
+          control2: transformPoint(shape.control2, matrix, pivot),
+          end: transformPoint(shape.end, matrix, pivot),
+        };
       default:
         return shape;
     }
   });
 
-  setStatus(`${label} aplicada em ${count} elemento(s). Pivô: (${pivot.x}, ${pivot.y}).`);
+  setStatus(`${label} aplicada em ${count} elemento(s). PivÃ´: (${pivot.x}, ${pivot.y}).`);
 }
 
 function applyScale() {
@@ -1186,7 +1434,7 @@ function applyScale() {
   const sy = Number(scaleYInput.value);
 
   if (Number.isNaN(sx) || Number.isNaN(sy)) {
-    setStatus("Informe valores numéricos válidos para a escala.");
+    setStatus("Informe valores numÃ©ricos vÃ¡lidos para a escala.");
     return;
   }
 
@@ -1203,7 +1451,7 @@ function applyRotation() {
   const angle = Number(rotationInput.value);
 
   if (Number.isNaN(angle)) {
-    setStatus("Informe um ângulo numérico válido para a rotação.");
+    setStatus("Informe um Ã¢ngulo numÃ©rico vÃ¡lido para a rotaÃ§Ã£o.");
     return;
   }
 
@@ -1216,7 +1464,7 @@ function applyRotation() {
       [cos, -sin],
       [sin, cos],
     ],
-    `Rotação (${angle}°)`,
+    `RotaÃ§Ã£o (${angle}Â°)`,
   );
 }
 
@@ -1237,9 +1485,9 @@ function applyReflection(mode) {
   };
 
   const labelByMode = {
-    x: "Reflexão no eixo X",
-    y: "Reflexão no eixo Y",
-    xy: "Reflexão nos eixos X/Y",
+    x: "ReflexÃ£o no eixo X",
+    y: "ReflexÃ£o no eixo Y",
+    xy: "ReflexÃ£o nos eixos X/Y",
   };
 
   applyLinearTransform(matrixByMode[mode], labelByMode[mode]);
@@ -1252,7 +1500,7 @@ function applyClip() {
   }
 
   if (state.selectedIds.size === 0) {
-    setStatus("Selecione ao menos uma reta ou polígono antes de aplicar o recorte.");
+    setStatus("Selecione ao menos uma reta ou polÃ­gono antes de aplicar o recorte.");
     return;
   }
 
@@ -1263,6 +1511,7 @@ function applyClip() {
   let generatedSegments = 0;
   const traceBlocks = [];
 
+  // Apenas retas e polÃ­gonos participam do recorte exigido pelo trabalho.
   state.shapes = state.shapes.flatMap((shape) => {
     if (!state.selectedIds.has(shape.id)) {
       return [shape];
@@ -1312,7 +1561,7 @@ function applyClip() {
     `Recorte por ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
     traceBlocks.length > 0
       ? traceBlocks.join("\n\n----------------\n\n").split("\n")
-      : ["Nenhuma reta ou polígono foi processado."],
+      : ["Nenhuma reta ou polÃ­gono foi processado."],
   );
   render();
   setStatus(
@@ -1335,7 +1584,7 @@ function clearProject() {
 
 function deleteSelected() {
   if (state.selectedIds.size === 0) {
-    setStatus("Nenhum elemento selecionado para exclusão.");
+    setStatus("Nenhum elemento selecionado para exclusÃ£o.");
     return;
   }
 
@@ -1351,7 +1600,7 @@ function deleteSelected() {
 
 function finishPolygon() {
   if (state.pendingPoints.length < 3) {
-    setStatus("Um polígono precisa de pelo menos três vértices.");
+    setStatus("Um polÃ­gono precisa de pelo menos trÃªs vÃ©rtices.");
     return;
   }
 
@@ -1363,7 +1612,7 @@ function finishPolygon() {
   state.pendingPoints = [];
   syncPendingButtons();
   refreshDataInspector();
-  setStatus("Polígono criado.");
+  setStatus("PolÃ­gono criado.");
 }
 
 function cancelPending() {
@@ -1372,7 +1621,7 @@ function cancelPending() {
   syncPendingButtons();
   refreshDataInspector();
   render();
-  setStatus("Operação em andamento cancelada.");
+  setStatus("OperaÃ§Ã£o em andamento cancelada.");
 }
 
 function updateStats() {
@@ -1381,6 +1630,8 @@ function updateStats() {
     line: 0,
     circle: 0,
     polygon: 0,
+    hermite: 0,
+    bezier: 0,
   };
 
   state.shapes.forEach((shape) => {
@@ -1388,7 +1639,7 @@ function updateStats() {
   });
 
   stats.textContent =
-    `Pontos: ${totals.point} | Retas: ${totals.line} | Circunferências: ${totals.circle} | Polígonos: ${totals.polygon}`;
+    `Pontos: ${totals.point} | Retas: ${totals.line} | Circunferencias: ${totals.circle} | Poligonos: ${totals.polygon} | Hermite: ${totals.hermite} | Bezier: ${totals.bezier}`;
   selectionSummary.textContent = `Selecionados: ${state.selectedIds.size}`;
   refreshDataInspector();
 }
@@ -1435,6 +1686,14 @@ function renderGrid() {
   ctx.restore();
 }
 
+// A geometria armazenada sÃ³ Ã© convertida para a grade aqui,
+// evitando degradaÃ§Ã£o acumulada em rotaÃ§Ãµes e recortes sucessivos.
+function drawGuideSegments(segments, color) {
+  segments.forEach(([start, end]) => {
+    getLinePixels(start, end, "dda").forEach((point) => drawPixel(point, color));
+  });
+}
+
 function renderShapes() {
   state.shapes.forEach((shape) => {
     const isSelected = state.selectedIds.has(shape.id);
@@ -1442,6 +1701,7 @@ function renderShapes() {
     getShapePixels(shape).forEach((point) => drawPixel(point, baseColor));
 
     if (isSelected) {
+      drawGuideSegments(getCurveGuideSegments(shape), "#8b5e3c");
       getShapeReferencePoints(shape).forEach((point) => drawGuidePoint(point, "#1f2937", 4));
     }
   });
@@ -1468,6 +1728,27 @@ function renderPending() {
     for (let index = 0; index < state.pendingPoints.length - 1; index += 1) {
       const pixels = getLinePixels(state.pendingPoints[index], state.pendingPoints[index + 1], polygonAlgorithmSelect.value);
       pixels.forEach((point) => drawPixel(point, COLORS.pending));
+    }
+    return;
+  }
+
+  if (state.tool === "bezier") {
+    for (let index = 0; index < state.pendingPoints.length - 1; index += 1) {
+      const pixels = getLinePixels(state.pendingPoints[index], state.pendingPoints[index + 1], lineAlgorithmSelect.value);
+      pixels.forEach((point) => drawPixel(point, COLORS.pending));
+    }
+    return;
+  }
+
+  if (state.tool === "hermite") {
+    if (state.pendingPoints.length >= 2) {
+      getLinePixels(state.pendingPoints[0], state.pendingPoints[1], lineAlgorithmSelect.value)
+        .forEach((point) => drawPixel(point, COLORS.pending));
+    }
+
+    if (state.pendingPoints.length >= 3) {
+      getLinePixels(state.pendingPoints[0], state.pendingPoints[2], lineAlgorithmSelect.value)
+        .forEach((point) => drawPixel(point, COLORS.pending));
     }
   }
 }
@@ -1523,7 +1804,7 @@ function addLinePoint(position) {
     algorithm: lineAlgorithmSelect.value,
   });
   setAlgorithmTrace(
-    `Rasterização de reta por ${lineAlgorithmSelect.value.toUpperCase()}`,
+    `RasterizaÃ§Ã£o de reta por ${lineAlgorithmSelect.value.toUpperCase()}`,
     buildLineRasterTrace(start, end, lineAlgorithmSelect.value),
   );
   state.pendingPoints = [];
@@ -1538,7 +1819,7 @@ function addCirclePoint(position) {
 
   if (state.pendingPoints.length < 2) {
     render();
-    setStatus(`Centro da circunferência registrado em (${position.x}, ${position.y}).`);
+    setStatus(`Centro da circunferÃªncia registrado em (${position.x}, ${position.y}).`);
     return;
   }
 
@@ -1554,7 +1835,7 @@ function addCirclePoint(position) {
   });
   state.pendingPoints = [];
   syncPendingButtons();
-  setStatus(`Circunferência criada com raio ${radius} pelo algoritmo de Bresenham.`);
+  setStatus(`CircunferÃªncia criada com raio ${radius} pelo algoritmo de Bresenham.`);
 }
 
 function addPolygonVertex(position) {
@@ -1562,7 +1843,73 @@ function addPolygonVertex(position) {
   syncPendingButtons();
   refreshDataInspector();
   render();
-  setStatus(`Vértice ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
+  setStatus(`VÃ©rtice ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
+}
+
+function addHermitePoint(position) {
+  state.pendingPoints.push(position);
+  syncPendingButtons();
+  refreshDataInspector();
+  render();
+
+  if (state.pendingPoints.length === 1) {
+    setStatus(`Hermite: ponto inicial registrado em (${position.x}, ${position.y}).`);
+    return;
+  }
+
+  if (state.pendingPoints.length === 2) {
+    setStatus(`Hermite: ponto final registrado em (${position.x}, ${position.y}). Agora clique no controle da tangente inicial.`);
+    return;
+  }
+
+  if (state.pendingPoints.length === 3) {
+    setStatus(`Hermite: controle da tangente inicial registrado em (${position.x}, ${position.y}). Agora clique no controle da tangente final.`);
+    return;
+  }
+
+  const [start, end, tangentStart, tangentEnd] = state.pendingPoints;
+  const sampleCount = getCurveSampleCount([start, tangentStart, end, tangentEnd]);
+  // Os pontos de tangencia sao armazenados como handles; os vetores usados
+  // no calculo de Hermite sao obtidos pela diferenca handle - ponto extremo.
+  const createdShape = createShape({
+    type: "hermite",
+    start,
+    end,
+    tangentStart,
+    tangentEnd,
+    algorithm: lineAlgorithmSelect.value,
+  });
+  state.pendingPoints = [];
+  syncPendingButtons();
+  setAlgorithmTrace("Curva de Hermite", buildCurveTrace(createdShape));
+  setStatus(`Curva de Hermite criada com ${sampleCount} amostras.`);
+}
+
+function addBezierPoint(position) {
+  state.pendingPoints.push(position);
+  syncPendingButtons();
+  refreshDataInspector();
+  render();
+
+  if (state.pendingPoints.length < 4) {
+    setStatus(`Bezier: ponto de controle ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
+    return;
+  }
+
+  const [start, control1, control2, end] = state.pendingPoints;
+  const sampleCount = getCurveSampleCount([start, control1, control2, end]);
+  const createdShape = createShape({
+    type: "bezier",
+    start,
+    control1,
+    control2,
+    end,
+    algorithm: lineAlgorithmSelect.value,
+  });
+  state.pendingPoints = [];
+  syncPendingButtons();
+  setAlgorithmTrace("Curva de Bezier", buildCurveTrace(createdShape));
+  setStatus(`Curva de Bezier criada com ${sampleCount} amostras.`);
 }
 
 function completeSelection(rect) {
@@ -1589,11 +1936,19 @@ function handleCanvasClick(position) {
     case "polygon":
       addPolygonVertex(position);
       break;
+    case "hermite":
+      addHermitePoint(position);
+      break;
+    case "bezier":
+      addBezierPoint(position);
+      break;
     default:
       break;
   }
 }
 
+// A interaÃ§Ã£o principal da aplicaÃ§Ã£o acontece por cliques e arrastes no canvas,
+// como pedido no enunciado, deixando o teclado como apoio opcional.
 canvas.addEventListener("pointermove", (event) => {
   const position = canvasToWorld(event);
   cursorPosition.textContent = `Cursor: (${position.x}, ${position.y})`;
@@ -1636,7 +1991,7 @@ canvas.addEventListener("pointerup", (event) => {
       refreshDataInspector();
       render();
       setStatus(
-        `Janela de recorte definida: [${rect.minX}, ${rect.minY}] até [${rect.maxX}, ${rect.maxY}].`,
+        `Janela de recorte definida: [${rect.minX}, ${rect.minY}] atÃ© [${rect.maxX}, ${rect.maxY}].`,
       );
     }
     return;
@@ -1667,7 +2022,7 @@ clearClipButton.addEventListener("click", () => {
 deleteSelectedButton.addEventListener("click", deleteSelected);
 clearCanvasButton.addEventListener("click", clearProject);
 clearTraceButton.addEventListener("click", () => {
-  setAlgorithmTrace("Console limpo", ["Aguardando a criação de uma reta ou a aplicação de um recorte."]);
+  setAlgorithmTrace("Console limpo", ["Aguardando a criaÃ§Ã£o de uma reta ou a aplicaÃ§Ã£o de um recorte."]);
 });
 themeToggleButton.addEventListener("click", () => {
   applyTheme(state.theme === "dark" ? "light" : "dark");
@@ -1715,6 +2070,7 @@ workspaceSplitter.addEventListener("pointerdown", (event) => {
   window.addEventListener("pointerup", stopHandler, { once: true });
 });
 
+// Atalhos nÃ£o devem interferir enquanto o usuÃ¡rio estiver editando campos numÃ©ricos.
 document.addEventListener("keydown", (event) => {
   if (shouldIgnoreShortcut(event)) {
     return;
@@ -1749,6 +2105,8 @@ document.addEventListener("keydown", (event) => {
     r: () => setTool("line"),
     c: () => setTool("circle"),
     g: () => setTool("polygon"),
+    h: () => setTool("hermite"),
+    z: () => setTool("bezier"),
     s: () => setTool("select"),
     j: () => setTool("clip-window"),
     t: () => applyTranslation(),
@@ -1769,6 +2127,8 @@ document.addEventListener("keydown", (event) => {
   action();
 });
 
+// O canvas Ã© recalculado com base no espaÃ§o Ãºtil disponÃ­vel, preservando nitidez
+// e a aparÃªncia de matriz de pixels em diferentes tamanhos de viewport.
 function configureCanvasResolution() {
   const { totalAvailableWidth } = getCanvasSpaceMetrics();
   const basePixelSize = Math.max(4, Math.floor(totalAvailableWidth / WORLD.width));
@@ -1808,3 +2168,4 @@ if (window.ResizeObserver) {
   const resizeObserver = new ResizeObserver(() => configureCanvasResolution());
   resizeObserver.observe(canvasFrame);
 }
+

@@ -29,8 +29,6 @@ Aplicação web interativa para o primeiro trabalho prático da disciplina de Co
 - `index.html`: interface principal
 - `styles.css`: identidade visual e layout
 - `app.js`: estado da aplicação, interação e algoritmos gráficos
-- `docs/roteiro-testes.md`: roteiro para gravação de vídeo e validação
-- `docs/empacotamento-windows.md`: caminho sugerido para gerar executável e instalador para Windows
 - `.github/workflows/deploy-pages.yml`: publicação automática no GitHub Pages
 
 ## Como executar
@@ -42,7 +40,7 @@ O projeto é estático e pode ser aberto diretamente no navegador.
 3. Faça os desenhos e seleções diretamente no canvas.
 4. Aplique transformações e recortes pelos controles laterais.
 
-Se preferir servir localmente, qualquer servidor estático simples funciona.
+Alternativamente, acesse https://pieceofhell.github.io/tp1-computer-graphics/, onde o site está publicado por meio do GitHub Pages.
 
 ## Fluxo de uso
 
@@ -67,7 +65,7 @@ Se preferir servir localmente, qualquer servidor estático simples funciona.
 
 ### Recorte
 
-1. Escolha `Janela de recorte`.
+1. Escolha `Janela de recorte` (em Ferramentas).
 2. Arraste a região retangular de recorte.
 3. Volte à seleção e selecione as retas desejadas.
 4. Escolha `Cohen-Sutherland` ou `Liang-Barsky`.
@@ -78,18 +76,3 @@ Se preferir servir localmente, qualquer servidor estático simples funciona.
 - O projeto evita depender de entrada por teclado para a construção dos elementos principais.
 - Os algoritmos foram implementados manualmente em JavaScript, sem bibliotecas gráficas externas.
 - A área de desenho usa uma grade cartesiana com origem no centro, o que facilita rotação e reflexões.
-
-## GitHub
-
-O ambiente atual não possui `gh` autenticado. Para publicar este repositório no GitHub:
-
-```bash
-git add .
-git commit -m "feat: implementa TP1 de computacao grafica"
-git remote add origin <URL_DO_REPOSITORIO>
-git push -u origin codex/graphics-tp1
-```
-
-Se quiser hospedar a versão web, a opção mais simples é usar GitHub Pages.
-
-Ao subir o projeto para `main`, `master` ou `codex/graphics-tp1`, o workflow já fica pronto para publicar a aplicação estática.

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TP1 Computação Gráfica</title>
+    <title>TP1 Computacao Grafica</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,14 +15,14 @@
   <body>
     <section class="page-header">
       <div class="page-header__intro">
-        <p class="eyebrow">Computação Gráfica</p>
+        <p class="eyebrow">Computacao Grafica</p>
         <h1>TP1 Unidade 1</h1>
-        <p class="page-header__meta">Pontifícia Universidade Católica de Minas Gerais</p>
+        <p class="page-header__meta">Pontificia Universidade Catolica de Minas Gerais</p>
         <p class="page-header__meta">Campus Lourdes</p>
         <p class="page-header__meta">Professora: Rosilane Mota</p>
         <p class="page-header__meta">Aluno: Henrique Oliveira da Cunha Franco</p>
         <p class="page-header__description">
-          Área de desenho baseada em pixels com rasterização, transformações 2D, seleção retangular e recorte.
+          Area de desenho baseada em pixels com rasterizacao, curvas parametricas, transformacoes 2D, selecao retangular e recorte.
         </p>
       </div>
 
@@ -39,22 +39,24 @@
             <div class="shortcut-grid">
               <div class="shortcut-item"><kbd>P</kbd><span>Ponto</span></div>
               <div class="shortcut-item"><kbd>R</kbd><span>Reta</span></div>
-              <div class="shortcut-item"><kbd>C</kbd><span>Circunferência</span></div>
-              <div class="shortcut-item"><kbd>G</kbd><span>Polígono</span></div>
-              <div class="shortcut-item"><kbd>S</kbd><span>Seleção</span></div>
+              <div class="shortcut-item"><kbd>C</kbd><span>Circunferencia</span></div>
+              <div class="shortcut-item"><kbd>G</kbd><span>Poligono</span></div>
+              <div class="shortcut-item"><kbd>H</kbd><span>Hermite</span></div>
+              <div class="shortcut-item"><kbd>Z</kbd><span>Bezier</span></div>
+              <div class="shortcut-item"><kbd>S</kbd><span>Selecao</span></div>
               <div class="shortcut-item"><kbd>J</kbd><span>Janela</span></div>
             </div>
           </section>
 
           <section class="shortcut-group">
-            <p class="shortcut-group__title">Transformações e Recorte</p>
+            <p class="shortcut-group__title">Transformacoes e Recorte</p>
             <div class="shortcut-grid">
-              <div class="shortcut-item"><kbd>T</kbd><span>Translação</span></div>
+              <div class="shortcut-item"><kbd>T</kbd><span>Translacao</span></div>
               <div class="shortcut-item"><kbd>E</kbd><span>Escala</span></div>
-              <div class="shortcut-item"><kbd>O</kbd><span>Rotação</span></div>
-              <div class="shortcut-item"><kbd>X</kbd><span>Reflexão X</span></div>
-              <div class="shortcut-item"><kbd>Y</kbd><span>Reflexão Y</span></div>
-              <div class="shortcut-item"><kbd>B</kbd><span>Reflexão XY</span></div>
+              <div class="shortcut-item"><kbd>O</kbd><span>Rotacao</span></div>
+              <div class="shortcut-item"><kbd>X</kbd><span>Reflexao X</span></div>
+              <div class="shortcut-item"><kbd>Y</kbd><span>Reflexao Y</span></div>
+              <div class="shortcut-item"><kbd>B</kbd><span>Reflexao XY</span></div>
               <div class="shortcut-item"><kbd>K</kbd><span>Aplicar recorte</span></div>
             </div>
           </section>
@@ -62,8 +64,8 @@
           <section class="shortcut-group">
             <p class="shortcut-group__title">Fluxo</p>
             <div class="shortcut-grid shortcut-grid--compact">
-              <div class="shortcut-item"><kbd>Delete</kbd><span>Excluir seleção</span></div>
-              <div class="shortcut-item"><kbd>Enter</kbd><span>Finalizar polígono</span></div>
+              <div class="shortcut-item"><kbd>Delete</kbd><span>Excluir selecao</span></div>
+              <div class="shortcut-item"><kbd>Enter</kbd><span>Finalizar poligono</span></div>
               <div class="shortcut-item"><kbd>Esc</kbd><span>Cancelar desenho</span></div>
             </div>
           </section>
@@ -81,13 +83,15 @@
           <div class="tool-grid">
             <button class="tool-button active" data-tool="point">Ponto</button>
             <button class="tool-button" data-tool="line">Reta</button>
-            <button class="tool-button" data-tool="circle">Circunferência</button>
-            <button class="tool-button" data-tool="polygon">Polígono</button>
-            <button class="tool-button" data-tool="select">Seleção</button>
+            <button class="tool-button" data-tool="circle">Circunferencia</button>
+            <button class="tool-button" data-tool="polygon">Poligono</button>
+            <button class="tool-button" data-tool="hermite">Hermite</button>
+            <button class="tool-button" data-tool="bezier">Bezier</button>
+            <button class="tool-button" data-tool="select">Selecao</button>
             <button class="tool-button" data-tool="clip-window">Janela de recorte</button>
           </div>
           <div class="inline-actions">
-            <button id="finishPolygonButton" class="secondary-button" disabled>Finalizar polígono</button>
+            <button id="finishPolygonButton" class="secondary-button" disabled>Finalizar poligono</button>
             <button id="cancelPendingButton" class="secondary-button" disabled>Cancelar desenho</button>
           </div>
         </div>
@@ -97,14 +101,14 @@
             <h2>Algoritmos</h2>
           </div>
           <label class="field">
-            <span>Rasterização de retas</span>
+            <span>Rasterizacao de retas</span>
             <select id="lineAlgorithmSelect">
               <option value="dda">DDA</option>
               <option value="bresenham">Bresenham</option>
             </select>
           </label>
           <label class="field">
-            <span>Arestas do polígono</span>
+            <span>Arestas do poligono</span>
             <select id="polygonAlgorithmSelect">
               <option value="bresenham">Bresenham</option>
               <option value="dda">DDA</option>
@@ -121,20 +125,32 @@
 
         <div class="panel">
           <div class="panel-heading">
-            <h2>Transformações 2D</h2>
+            <h2>Curvas Parametricas</h2>
+          </div>
+          <p class="panel-copy small">
+            <strong>Hermite:</strong> clique em ponto inicial, ponto final, controle da tangente inicial e controle da tangente final.
+          </p>
+          <p class="panel-copy small">
+            <strong>Bezier:</strong> clique em P0, P1, P2 e P3. A curva e amostrada e cada trecho entre amostras usa o algoritmo de retas selecionado.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Transformacoes 2D</h2>
           </div>
           <div class="field-row">
             <label class="field">
-              <span>Translação X</span>
+              <span>Translacao X</span>
               <input id="translateXInput" type="number" value="5" step="1" />
             </label>
             <label class="field">
-              <span>Translação Y</span>
+              <span>Translacao Y</span>
               <input id="translateYInput" type="number" value="5" step="1" />
             </label>
           </div>
           <div class="inline-actions">
-            <button id="translateButton">Aplicar translação</button>
+            <button id="translateButton">Aplicar translacao</button>
           </div>
 
           <div class="field-row">
@@ -153,25 +169,25 @@
 
           <div class="field-row">
             <label class="field">
-              <span>Rotação (graus)</span>
+              <span>Rotacao (graus)</span>
               <input id="rotationInput" type="number" value="30" step="5" />
             </label>
             <label class="field">
-              <span>Pivô</span>
+              <span>Pivo</span>
               <select id="pivotModeSelect">
-                <option value="selection-center">Centro da seleção</option>
+                <option value="selection-center">Centro da selecao</option>
                 <option value="origin">Origem (0,0)</option>
               </select>
             </label>
           </div>
           <div class="inline-actions">
-            <button id="rotateButton">Aplicar rotação</button>
+            <button id="rotateButton">Aplicar rotacao</button>
           </div>
 
           <div class="inline-actions reflection-row">
-            <button id="reflectXButton">Reflexão X</button>
-            <button id="reflectYButton">Reflexão Y</button>
-            <button id="reflectXYButton">Reflexão XY</button>
+            <button id="reflectXButton">Reflexao X</button>
+            <button id="reflectYButton">Reflexao Y</button>
+            <button id="reflectXYButton">Reflexao XY</button>
           </div>
         </div>
 
@@ -180,7 +196,7 @@
             <h2>Recorte</h2>
           </div>
           <p class="panel-copy small">
-            Defina uma janela com a ferramenta <strong>Janela de recorte</strong> e aplique o algoritmo sobre as retas selecionadas.
+            Defina uma janela com a ferramenta <strong>Janela de recorte</strong> e aplique o algoritmo sobre as retas e poligonos selecionados.
           </p>
           <div class="inline-actions">
             <button id="applyClipButton">Aplicar recorte</button>
@@ -190,10 +206,10 @@
 
         <div class="panel">
           <div class="panel-heading">
-            <h2>Ações</h2>
+            <h2>Acoes</h2>
           </div>
           <div class="inline-actions">
-            <button id="deleteSelectedButton" class="secondary-button">Excluir seleção</button>
+            <button id="deleteSelectedButton" class="secondary-button">Excluir selecao</button>
             <button id="clearCanvasButton" class="danger-button">Limpar projeto</button>
           </div>
           <div id="stats" class="stats"></div>
@@ -203,8 +219,8 @@
       <main class="workspace">
         <div class="canvas-toolbar">
           <div>
-            <p class="canvas-title">Área de desenho</p>
-            <p class="canvas-copy">Use cliques e arrastes no canvas. A origem está no centro, com eixo Y apontando para cima.</p>
+            <p class="canvas-title">Area de desenho</p>
+            <p class="canvas-copy">Use cliques e arrastes no canvas. A origem esta no centro, com eixo Y apontando para cima.</p>
           </div>
           <div class="canvas-toolbar__actions">
             <div class="zoom-controls">
@@ -240,10 +256,10 @@
               <div class="data-panel__header">
                 <div>
                   <p class="status-title">Painel de Estrutura de Dados</p>
-                  <p class="data-panel__copy">Visão da estrutura interna usada pela aplicação.</p>
+                  <p class="data-panel__copy">Visao da estrutura interna usada pela aplicacao.</p>
                 </div>
                 <div class="data-panel__actions">
-                  <button id="toggleDataViewButton" class="secondary-button">Mostrar seleção</button>
+                  <button id="toggleDataViewButton" class="secondary-button">Mostrar selecao</button>
                 </div>
               </div>
               <pre id="dataInspector" class="data-inspector"></pre>
@@ -252,8 +268,8 @@
             <section class="trace-panel">
               <div class="data-panel__header">
                 <div>
-                  <p class="status-title">Rastreamento Algorítmico</p>
-                  <p class="data-panel__copy">Rastro dos cálculos aplicados pelos algoritmos.</p>
+                  <p class="status-title">Rastreamento Algoritmico</p>
+                  <p class="data-panel__copy">Rastro dos calculos aplicados pelos algoritmos.</p>
                 </div>
                 <div class="data-panel__actions">
                   <button id="clearTraceButton" class="secondary-button">Limpar painel</button>
