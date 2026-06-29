@@ -22,7 +22,7 @@
         <p class="page-header__meta">Professora: Rosilane Mota</p>
         <p class="page-header__meta">Aluno: Henrique Oliveira da Cunha Franco</p>
         <p class="page-header__description">
-          Area de desenho baseada em pixels com rasterizacao, curvas parametricas, transformacoes 2D, selecao retangular e recorte.
+          Area de desenho baseada em pixels com rasterizacao, curva interpolada, curva de Bezier, transformacoes 2D, selecao retangular e recorte.
         </p>
       </div>
 
@@ -41,7 +41,7 @@
               <div class="shortcut-item"><kbd>R</kbd><span>Reta</span></div>
               <div class="shortcut-item"><kbd>C</kbd><span>Circunferencia</span></div>
               <div class="shortcut-item"><kbd>G</kbd><span>Poligono</span></div>
-              <div class="shortcut-item"><kbd>H</kbd><span>Hermite</span></div>
+              <div class="shortcut-item"><kbd>I</kbd><span>Interpolada</span></div>
               <div class="shortcut-item"><kbd>Z</kbd><span>Bezier</span></div>
               <div class="shortcut-item"><kbd>S</kbd><span>Selecao</span></div>
               <div class="shortcut-item"><kbd>J</kbd><span>Janela</span></div>
@@ -85,7 +85,7 @@
             <button class="tool-button" data-tool="line">Reta</button>
             <button class="tool-button" data-tool="circle">Circunferencia</button>
             <button class="tool-button" data-tool="polygon">Poligono</button>
-            <button class="tool-button" data-tool="hermite">Hermite</button>
+            <button class="tool-button" data-tool="interpolated">Interpolada</button>
             <button class="tool-button" data-tool="bezier">Bezier</button>
             <button class="tool-button" data-tool="select">Selecao</button>
             <button class="tool-button" data-tool="clip-window">Janela de recorte</button>
@@ -128,7 +128,7 @@
             <h2>Curvas Parametricas</h2>
           </div>
           <p class="panel-copy small">
-            <strong>Hermite:</strong> clique em ponto inicial, ponto final, controle da tangente inicial e controle da tangente final.
+            <strong>Interpolada:</strong> clique em P0, P1, P2 e P3. A curva cubica passa pelos quatro pontos informados.
           </p>
           <p class="panel-copy small">
             <strong>Bezier:</strong> clique em P0, P1, P2 e P3. A curva e amostrada e cada trecho entre amostras usa o algoritmo de retas selecionado.

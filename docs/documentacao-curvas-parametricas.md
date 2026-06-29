@@ -2,9 +2,9 @@
 
 ## 1. Objetivo
 
-Este documento descreve a implementacao das duas curvas parametricas adicionadas ao projeto:
+Este documento descreve a implementacao das curvas adicionadas ao projeto:
 
-- Curva de Hermite
+- Curva interpolada cubica
 - Curva de Bezier cubica
 
 Tambem registra a organizacao do codigo, o modelo matematico utilizado, os refinamentos adotados e um manual de uso da interface.
@@ -13,40 +13,75 @@ Tambem registra a organizacao do codigo, o modelo matematico utilizado, os refin
 
 Implementacao original desenvolvida para este projeto, sem reaproveitamento direto de codigo externo para as curvas.
 
-As formulas matematicas seguem as formas classicas apresentadas em disciplinas introdutorias de Computacao Grafica:
+As formulas matematicas seguem os modelos classicos apresentados em Computacao Grafica:
 
-- forma cubica de Hermite
+- interpolacao polinomial de Lagrange
 - forma cubica de Bezier nas bases de Bernstein
 
 ## 3. Organizacao do codigo
 
-Os principais pontos da implementacao estao em [app.js](C:/Users/henri/Documents/New%20project/app.js):
+Os principais pontos da implementacao estao em:
 
-- configuracao de ferramentas e estado global:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L1)
-- serializacao das estruturas para o painel interno:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L152)
-- rasterizacao basica de retas e circunferencia:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L340)
-- avaliacao e amostragem das curvas:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L582)
-- integracao das curvas com selecao, bounds e transformacoes:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L577)
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L1129)
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L1168)
-- criacao interativa por cliques:
-  [app.js](C:/Users/henri/Documents/New%20project/app.js#L1847)
-
-Os principais pontos da interface estao em:
-
+- [app.js](C:/Users/henri/Documents/New%20project/app.js)
 - [index.html](C:/Users/henri/Documents/New%20project/index.html)
 - [styles.css](C:/Users/henri/Documents/New%20project/styles.css)
 
+Dentro de [app.js](C:/Users/henri/Documents/New%20project/app.js), a organizacao relevante para as curvas ficou assim:
+
+- estado global, ferramentas e serializacao das estruturas internas
+- avaliacao das curvas e amostragem parametrica
+- rasterizacao por segmentos de reta
+- integracao com selecao, bounds e transformacoes
+- criacao interativa por cliques no canvas
+
 ## 4. Modelo matematico
 
-### 4.1. Curva de Bezier cubica
+### 4.1. Curva interpolada cubica
 
-A curva de Bezier foi implementada com quatro pontos de controle:
+A curva interpolada foi implementada com quatro pontos informados pelo usuario:
+
+- P0
+- P1
+- P2
+- P3
+
+Ao contrario da Bezier, os quatro pontos pertencem a curva.
+
+Foi adotada uma interpolacao cubica de Lagrange com os parametros:
+
+```text
+t0 = 0
+t1 = 1/3
+t2 = 2/3
+t3 = 1
+```
+
+A curva e dada por:
+
+```text
+C(t) = L0(t) P0 + L1(t) P1 + L2(t) P2 + L3(t) P3
+```
+
+com `0 <= t <= 1`, em que cada base de Lagrange e:
+
+```text
+Li(t) = produto, para j != i, de (t - tj) / (ti - tj)
+```
+
+Com isso, a implementacao garante:
+
+```text
+C(0)   = P0
+C(1/3) = P1
+C(2/3) = P2
+C(1)   = P3
+```
+
+Na pratica, isso produz uma curva cubica que passa exatamente pelos quatro cliques do usuario.
+
+### 4.2. Curva de Bezier cubica
+
+A curva de Bezier foi implementada com quatro pontos:
 
 - P0: ponto inicial
 - P1: primeiro ponto de controle
@@ -64,90 +99,36 @@ B(t) = (1 - t)^3 P0
 
 com `0 <= t <= 1`.
 
-Na implementacao:
-
-- `evaluateBezierPoint(...)` calcula um ponto da curva para um valor de `t`
-- `getCurveSamplePoints(...)` percorre varios valores de `t`
-- `getCurvePixels(...)` liga as amostras consecutivas por pequenos segmentos de reta
-
-### 4.2. Curva de Hermite cubica
-
-A curva de Hermite foi implementada com:
-
-- P0: ponto inicial
-- P1: ponto final
-- R0: vetor tangente inicial
-- R1: vetor tangente final
-
-As funcoes de base sao:
-
-```text
-h00(t) =  2t^3 - 3t^2 + 1
-h10(t) =    t^3 - 2t^2 + t
-h01(t) = -2t^3 + 3t^2
-h11(t) =    t^3 -   t^2
-```
-
-e a equacao da curva e:
-
-```text
-H(t) = h00(t) P0 + h10(t) R0 + h01(t) P1 + h11(t) R1
-```
-
-com `0 <= t <= 1`.
-
-Na interface, os vetores tangentes nao sao digitados numericamente. Em vez disso, o usuario informa dois pontos auxiliares:
-
-- handle inicial
-- handle final
-
-Os vetores tangentes sao obtidos por:
-
-```text
-R0 = handleInicial - P0
-R1 = handleFinal - P1
-```
-
-Esse refinamento permite definir a curva apenas com cliques no canvas, mantendo a proposta de interacao grafica do trabalho.
+Nesse caso, apenas `P0` e `P3` sao garantidamente pontos da curva. `P1` e `P2` controlam sua forma.
 
 ## 5. Refinamentos adotados
 
-### 5.1. Amostragem adaptativa
+### 5.1. Amostragem parametrica
 
-As curvas nao sao desenhadas por uma formula implicita de pixel. Elas sao amostradas em varios pontos ao longo do parametro `t`.
+As curvas nao sao desenhadas diretamente por uma equacao de pixels. Elas sao amostradas em varios valores de `t`.
 
-O numero de amostras e definido pela funcao:
-
-- [app.js](C:/Users/henri/Documents/New%20project/app.js#L582)
-
-Essa funcao estima o comprimento da linha guia entre os pontos de controle e escolhe um numero de amostras dentro de um intervalo controlado. Com isso:
-
-- curvas pequenas nao gastam processamento desnecessario
-- curvas maiores ficam visualmente mais suaves
+O numero de amostras e calculado a partir do comprimento aproximado da poligonal de referencia, com limite minimo e maximo. Isso evita curvas serrilhadas em casos maiores e processamento excessivo em casos pequenos.
 
 ### 5.2. Rasterizacao por segmentos
 
-Depois de amostrar a curva, cada par de amostras consecutivas e ligado por uma reta rasterizada.
+Depois da amostragem, cada par de amostras consecutivas e ligado por uma reta rasterizada.
 
-O algoritmo usado nesses segmentos e o mesmo selecionado para retas na interface:
+O algoritmo usado nesses trechos e o mesmo selecionado na interface para retas:
 
 - DDA
 - Bresenham
 
-Isso reaproveita a infraestrutura de rasterizacao ja existente no projeto e mantem consistencia visual e didatica.
+Isso mantem coerencia com os algoritmos exigidos no trabalho e reaproveita a infraestrutura ja implementada.
 
-### 5.3. Precisao geometrica separada da grade de pixels
+### 5.3. Precisao geometrica separada da grade
 
-As curvas seguem a mesma ideia adotada nas transformacoes e no recorte:
+As curvas mantem coordenadas decimais internamente, e o arredondamento para a grade de pixels ocorre apenas no desenho final.
 
-- a geometria e mantida com precisao decimal
-- o snap para inteiros ocorre apenas no momento da rasterizacao
-
-Esse refinamento evita degradacao acumulada quando o usuario aplica varias transformacoes sucessivas.
+Esse refinamento evita perda acumulada de qualidade quando o usuario aplica multiplas transformacoes.
 
 ### 5.4. Integracao com o restante do sistema
 
-As curvas foram integradas com:
+As duas curvas foram integradas com:
 
 - painel de estrutura de dados
 - painel de rastreamento algoritmico
@@ -161,15 +142,17 @@ As curvas foram integradas com:
 
 ## 6. Manual de uso
 
-### 6.1. Curva de Hermite
+### 6.1. Curva interpolada
 
-1. Selecione a ferramenta `Hermite`.
-2. Clique no ponto inicial.
-3. Clique no ponto final.
-4. Clique no controle da tangente inicial.
-5. Clique no controle da tangente final.
+1. Selecione a ferramenta `Interpolada`.
+2. Clique em `P0`.
+3. Clique em `P1`.
+4. Clique em `P2`.
+5. Clique em `P3`.
 
 Ao quarto clique, a curva e criada automaticamente.
+
+Os quatro pontos informados pertencem a curva.
 
 ### 6.2. Curva de Bezier
 
@@ -181,6 +164,8 @@ Ao quarto clique, a curva e criada automaticamente.
 
 Ao quarto clique, a curva e criada automaticamente.
 
+Nessa ferramenta, os pontos internos controlam a forma da curva, mas nao precisam pertencer a ela.
+
 ### 6.3. Selecao e transformacoes
 
 Depois de criada, a curva pode ser:
@@ -191,16 +176,17 @@ Depois de criada, a curva pode ser:
 - rotacionada
 - refletida
 
-Os pontos de controle continuam disponiveis visualmente quando a curva esta selecionada.
+Quando selecionada, a aplicacao mostra os pontos de referencia e a poligonal guia correspondente.
 
 ### 6.4. Rastreamento
 
 Ao criar uma curva, o painel `Rastreamento Algoritmico` mostra:
 
 - tipo da curva
-- algoritmo de rasterizacao usado nos segmentos
+- algoritmo de rasterizacao usado nos trechos
 - quantidade de amostras
-- alguns pontos calculados na curva
+- pontos de referencia usados
+- algumas amostras calculadas ao longo do parametro `t`
 
 ### 6.5. Observacao sobre recorte
 
@@ -215,13 +201,13 @@ As curvas parametricas nao entram na rotina de recorte implementada para a janel
 
 Em termos de fluxo interno, a implementacao funciona assim:
 
-1. o usuario fornece os pontos por clique
+1. o usuario informa os pontos por clique
 2. a aplicacao armazena a curva como estrutura geometrica
 3. a curva e avaliada para varios valores de `t`
 4. os pontos amostrados sao ligados por retas rasterizadas
-5. os pixels gerados sao desenhados na matriz do canvas
+5. os pixels gerados sao desenhados no canvas
 
-Esse modelo preserva a coerencia com a arquitetura ja existente do projeto e deixa explicito, para fins didaticos, onde entram:
+Esse modelo preserva a coerencia da arquitetura do projeto e deixa explicito, para fins didaticos, onde entram:
 
 - modelo matematico
 - amostragem
