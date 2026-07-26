@@ -1,53 +1,31 @@
-# Documentacao Tecnica das Curvas Parametricas
+# Documentação das Curvas Paramétricas
 
-## 1. Objetivo
+## 1. Organização do código
 
-Este documento descreve a implementacao das curvas adicionadas ao projeto:
+As curvas paramétricas foram integradas ao mesmo núcleo geométrico utilizado pelos demais elementos da aplicação, como pontos, retas, circunferências e polígonos.
 
-- Curva interpolada cubica
-- Curva de Bezier cubica
+De forma geral, a implementação foi organizada nas seguintes etapas:
 
-Tambem registra a organizacao do codigo, o modelo matematico utilizado, os refinamentos adotados e um manual de uso da interface.
+- definição das ferramentas disponíveis na interface
+- representação das curvas como estruturas geométricas
+- avaliação matemática da curva a partir do parâmetro `t`
+- amostragem de pontos ao longo da curva
+- rasterização da curva por segmentos de reta
+- integração com seleção, transformações e painel de inspeção
 
-## 2. Autoria e referencia
+A curva interpolada é armazenada como um conjunto de quatro pontos de referência. A curva de Bézier é armazenada com ponto inicial, dois pontos de controle e ponto final.
 
-Implementacao original desenvolvida para este projeto, sem reaproveitamento direto de codigo externo para as curvas.
+As curvas não são desenhadas diretamente por uma equação de pixels. Primeiro a aplicação calcula vários pontos ao longo da curva. Depois, cada par consecutivo de amostras é ligado por um segmento de reta rasterizado com o algoritmo selecionado para retas.
 
-As formulas matematicas seguem os modelos classicos apresentados em Computacao Grafica:
+## 2. Explicação do modelo matemático
 
-- interpolacao polinomial de Lagrange
-- forma cubica de Bezier nas bases de Bernstein
+### 2.1. Curva interpolada cúbica
 
-## 3. Organizacao do codigo
+A curva interpolada cúbica foi implementada com quatro pontos informados pelo usuário: `P0`, `P1`, `P2` e `P3`.
 
-Os principais pontos da implementacao estao em:
+Diferentemente da curva de Bézier, os quatro pontos pertencem à curva.
 
-- [app.js](C:/Users/henri/Documents/New%20project/app.js)
-- [index.html](C:/Users/henri/Documents/New%20project/index.html)
-- [styles.css](C:/Users/henri/Documents/New%20project/styles.css)
-
-Dentro de [app.js](C:/Users/henri/Documents/New%20project/app.js), a organizacao relevante para as curvas ficou assim:
-
-- estado global, ferramentas e serializacao das estruturas internas
-- avaliacao das curvas e amostragem parametrica
-- rasterizacao por segmentos de reta
-- integracao com selecao, bounds e transformacoes
-- criacao interativa por cliques no canvas
-
-## 4. Modelo matematico
-
-### 4.1. Curva interpolada cubica
-
-A curva interpolada foi implementada com quatro pontos informados pelo usuario:
-
-- P0
-- P1
-- P2
-- P3
-
-Ao contrario da Bezier, os quatro pontos pertencem a curva.
-
-Foi adotada uma interpolacao cubica de Lagrange com os parametros:
+Para isso, foi utilizada interpolação polinomial de Lagrange com os seguintes parâmetros:
 
 ```text
 t0 = 0
@@ -56,19 +34,19 @@ t2 = 2/3
 t3 = 1
 ```
 
-A curva e dada por:
+A curva é definida por:
 
 ```text
-C(t) = L0(t) P0 + L1(t) P1 + L2(t) P2 + L3(t) P3
+C(t) = L0(t)P0 + L1(t)P1 + L2(t)P2 + L3(t)P3
 ```
 
-com `0 <= t <= 1`, em que cada base de Lagrange e:
+em que cada base de Lagrange é dada por:
 
 ```text
-Li(t) = produto, para j != i, de (t - tj) / (ti - tj)
+Li(t) = produto, para j diferente de i, de (t - tj) / (ti - tj)
 ```
 
-Com isso, a implementacao garante:
+Com essa formulação, a curva satisfaz:
 
 ```text
 C(0)   = P0
@@ -77,139 +55,71 @@ C(2/3) = P2
 C(1)   = P3
 ```
 
-Na pratica, isso produz uma curva cubica que passa exatamente pelos quatro cliques do usuario.
+Logo, a curva passa exatamente pelos quatro pontos fornecidos.
 
-### 4.2. Curva de Bezier cubica
+### 2.2. Curva de Bézier cúbica
 
-A curva de Bezier foi implementada com quatro pontos:
+A curva de Bézier cúbica foi implementada com quatro pontos:
 
-- P0: ponto inicial
-- P1: primeiro ponto de controle
-- P2: segundo ponto de controle
-- P3: ponto final
+- `P0`: ponto inicial
+- `P1`: primeiro ponto de controle
+- `P2`: segundo ponto de controle
+- `P3`: ponto final
 
-A equacao usada e:
+A equação utilizada foi:
 
 ```text
 B(t) = (1 - t)^3 P0
-     + 3 (1 - t)^2 t P1
-     + 3 (1 - t) t^2 P2
+     + 3(1 - t)^2 t P1
+     + 3(1 - t) t^2 P2
      + t^3 P3
 ```
 
-com `0 <= t <= 1`.
+Nesse modelo, a curva passa obrigatoriamente por `P0` e `P3`. Já `P1` e `P2` não precisam pertencer à curva, pois controlam sua forma.
 
-Nesse caso, apenas `P0` e `P3` sao garantidamente pontos da curva. `P1` e `P2` controlam sua forma.
+### 2.3. Rasterização das curvas
 
-## 5. Refinamentos adotados
+As curvas são avaliadas em vários valores de `t` e convertidas em uma sequência de amostras geométricas.
 
-### 5.1. Amostragem parametrica
-
-As curvas nao sao desenhadas diretamente por uma equacao de pixels. Elas sao amostradas em varios valores de `t`.
-
-O numero de amostras e calculado a partir do comprimento aproximado da poligonal de referencia, com limite minimo e maximo. Isso evita curvas serrilhadas em casos maiores e processamento excessivo em casos pequenos.
-
-### 5.2. Rasterizacao por segmentos
-
-Depois da amostragem, cada par de amostras consecutivas e ligado por uma reta rasterizada.
-
-O algoritmo usado nesses trechos e o mesmo selecionado na interface para retas:
+Depois disso, cada par consecutivo de amostras é ligado por uma reta rasterizada. Para esse processo, a aplicação reutiliza os algoritmos de reta já existentes no projeto:
 
 - DDA
 - Bresenham
 
-Isso mantem coerencia com os algoritmos exigidos no trabalho e reaproveita a infraestrutura ja implementada.
+## 3. Manual de uso
 
-### 5.3. Precisao geometrica separada da grade
+### 3.1. Curva interpolada
 
-As curvas mantem coordenadas decimais internamente, e o arredondamento para a grade de pixels ocorre apenas no desenho final.
+Para criar uma curva interpolada:
 
-Esse refinamento evita perda acumulada de qualidade quando o usuario aplica multiplas transformacoes.
+1. selecionar a ferramenta `Interpolated`
+2. clicar em `P0`
+3. clicar em `P1`
+4. clicar em `P2`
+5. clicar em `P3`
 
-### 5.4. Integracao com o restante do sistema
+Após o quarto clique, a curva é criada automaticamente.
 
-As duas curvas foram integradas com:
+### 3.2. Curva de Bézier
 
-- painel de estrutura de dados
-- painel de rastreamento algoritmico
-- selecao retangular
-- translacao
-- escala
-- rotacao
-- reflexoes
-- exclusao
-- limpeza do projeto
+Para criar uma curva de Bézier:
 
-## 6. Manual de uso
+1. selecionar a ferramenta `Bezier`
+2. clicar em `P0`
+3. clicar em `P1`
+4. clicar em `P2`
+5. clicar em `P3`
 
-### 6.1. Curva interpolada
+Após o quarto clique, a curva é criada automaticamente.
 
-1. Selecione a ferramenta `Interpolada`.
-2. Clique em `P0`.
-3. Clique em `P1`.
-4. Clique em `P2`.
-5. Clique em `P3`.
-
-Ao quarto clique, a curva e criada automaticamente.
-
-Os quatro pontos informados pertencem a curva.
-
-### 6.2. Curva de Bezier
-
-1. Selecione a ferramenta `Bezier`.
-2. Clique em `P0`.
-3. Clique em `P1`.
-4. Clique em `P2`.
-5. Clique em `P3`.
-
-Ao quarto clique, a curva e criada automaticamente.
-
-Nessa ferramenta, os pontos internos controlam a forma da curva, mas nao precisam pertencer a ela.
-
-### 6.3. Selecao e transformacoes
+### 3.3. Seleção e transformações
 
 Depois de criada, a curva pode ser:
 
-- selecionada por regiao retangular
+- selecionada
 - transladada
 - escalada
 - rotacionada
 - refletida
 
-Quando selecionada, a aplicacao mostra os pontos de referencia e a poligonal guia correspondente.
-
-### 6.4. Rastreamento
-
-Ao criar uma curva, o painel `Rastreamento Algoritmico` mostra:
-
-- tipo da curva
-- algoritmo de rasterizacao usado nos trechos
-- quantidade de amostras
-- pontos de referencia usados
-- algumas amostras calculadas ao longo do parametro `t`
-
-### 6.5. Observacao sobre recorte
-
-O recorte pedido no trabalho continua aplicado a:
-
-- retas
-- poligonos
-
-As curvas parametricas nao entram na rotina de recorte implementada para a janela retangular, porque o foco do requisito original de recorte do trabalho esta nos algoritmos de reta.
-
-## 7. Resumo de implementacao
-
-Em termos de fluxo interno, a implementacao funciona assim:
-
-1. o usuario informa os pontos por clique
-2. a aplicacao armazena a curva como estrutura geometrica
-3. a curva e avaliada para varios valores de `t`
-4. os pontos amostrados sao ligados por retas rasterizadas
-5. os pixels gerados sao desenhados no canvas
-
-Esse modelo preserva a coerencia da arquitetura do projeto e deixa explicito, para fins didaticos, onde entram:
-
-- modelo matematico
-- amostragem
-- rasterizacao
-- exibicao final em pixels
+A aplicação mantém a estrutura geométrica da curva e atualiza sua rasterização após cada transformação.

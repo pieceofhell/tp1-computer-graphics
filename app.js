@@ -75,20 +75,20 @@ const state = {
   dataViewMode: "selected",
   theme: "light",
   algorithmTrace: {
-    title: "Console iniciado",
-    lines: ["Aguardando a criação de uma reta ou a aplicação de um recorte."],
+    title: "Console started",
+    lines: ["Waiting for a line to be created or for clipping to be applied."],
   },
 };
 
 const toolNames = {
-  point: "Ponto",
-  line: "Reta",
-  circle: "Circunferencia",
-  polygon: "Poligono",
-  interpolated: "Interpolada",
+  point: "Point",
+  line: "Line",
+  circle: "Circle",
+  polygon: "Polygon",
+  interpolated: "Interpolated",
   bezier: "Bezier",
-  select: "Selecao",
-  "clip-window": "Janela de recorte",
+  select: "Select",
+  "clip-window": "Clip window",
 };
 
 // Precisão geométrica e grade de pixels são tratadas separadamente:
@@ -144,7 +144,7 @@ function setAlgorithmTrace(title, lines) {
 function applyTheme(theme) {
   state.theme = theme;
   document.body.classList.toggle("dark-theme", theme === "dark");
-  themeToggleButton.textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
+  themeToggleButton.textContent = theme === "dark" ? "Light mode" : "Dark mode";
 }
 
 function updateZoomLabel() {
@@ -213,7 +213,7 @@ function refreshDataInspector() {
     : state.shapes;
 
   const inspectorPayload = {
-    mode: state.dataViewMode === "selected" ? "somente selecao" : "tudo",
+    mode: state.dataViewMode === "selected" ? "selection only" : "all",
     tool: state.tool,
     totals: {
       shapes: state.shapes.length,
@@ -235,7 +235,7 @@ function refreshDataInspector() {
 
   dataInspector.textContent = JSON.stringify(inspectorPayload, null, 2);
   toggleDataViewButton.textContent =
-    state.dataViewMode === "selected" ? "Mostrar tudo" : "Mostrar seleção";
+    state.dataViewMode === "selected" ? "Show all" : "Show selection";
 }
 
 function createShape(shape) {
@@ -263,16 +263,16 @@ function setTool(tool) {
   refreshDataInspector();
   render();
   if (tool === "interpolated") {
-    setStatus("Ferramenta ativa: Curva interpolada. Clique em P0, P1, P2 e P3. A curva passara pelos quatro pontos.");
+    setStatus("Active tool: Interpolated curve. Click P0, P1, P2, and P3. The curve will pass through all four points.");
     return;
   }
 
   if (tool === "bezier") {
-    setStatus("Ferramenta ativa: Bezier. Clique em P0, P1, P2 e P3 para definir a curva.");
+    setStatus("Active tool: Bezier. Click P0, P1, P2, and P3 to define the curve.");
     return;
   }
 
-  setStatus(`Ferramenta ativa: ${toolNames[tool]}.`);
+  setStatus(`Active tool: ${toolNames[tool]}.`);
 }
 
 function setZoom(scale) {
@@ -673,27 +673,27 @@ function buildCurveTrace(shape) {
   const samples = getCurveSamplePoints(shape);
   const previewPoints = samples.slice(0, 6);
   const lines = [
-    `Tipo: ${shape.type === "interpolated" ? "Curva interpolada cubica" : "Curva de Bezier"}`,
-    `Rasterizacao dos trechos: ${shape.algorithm.toUpperCase()}`,
-    `Amostras calculadas: ${samples.length}`,
+    `Type: ${shape.type === "interpolated" ? "Cubic interpolated curve" : "Bezier curve"}`,
+    `Segment rasterization: ${shape.algorithm.toUpperCase()}`,
+    `Computed samples: ${samples.length}`,
   ];
 
   if (shape.type === "interpolated") {
     shape.points.forEach((point, index) => {
       lines.push(`P${index}=${formatPoint(point)}`);
     });
-    lines.push("Parametros de interpolacao: t0=0, t1=1/3, t2=2/3, t3=1");
+    lines.push("Interpolation parameters: t0=0, t1=1/3, t2=2/3, t3=1");
   } else {
     lines.push(`P0=${formatPoint(shape.start)} P1=${formatPoint(shape.control1)}`);
     lines.push(`P2=${formatPoint(shape.control2)} P3=${formatPoint(shape.end)}`);
   }
 
   previewPoints.forEach((point, index) => {
-    lines.push(`amostra ${index}: ${formatPoint(point)}`);
+    lines.push(`sample ${index}: ${formatPoint(point)}`);
   });
 
   if (samples.length > previewPoints.length) {
-    lines.push(`... ${samples.length - previewPoints.length} amostra(s) omitida(s)`);
+    lines.push(`... ${samples.length - previewPoints.length} sample(s) omitted`);
   }
 
   return lines;
@@ -1048,26 +1048,26 @@ function clipPolygonShape(shape, rect, algorithm) {
   ];
 
   const traceLines = [
-    `Polígono ${shape.id}`,
-    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
-    `Reconstrução do contorno recortado contra a janela retangular.`,
-    `Algoritmo selecionado para retas: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
-    `Vértices iniciais: ${shape.vertices.map(formatPoint).join(" -> ")}`,
+    `Polygon ${shape.id}`,
+    `Window: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    "Clipped contour reconstruction against the rectangular window.",
+    `Selected line algorithm: ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
+    `Initial vertices: ${shape.vertices.map(formatPoint).join(" -> ")}`,
   ];
 
   let vertices = dedupePolygonVertices(shape.vertices.map(clonePoint));
 
   boundaries.forEach((boundary) => {
     traceLines.push("");
-    traceLines.push(`Recorte contra a borda ${boundary.name}: ${vertices.length} vértice(s) de entrada.`);
+    traceLines.push(`Clipping against the ${boundary.name} boundary: ${vertices.length} input vertex/vertices.`);
     vertices = clipPolygonAgainstBoundary(vertices, boundary, rect, traceLines);
-    traceLines.push(`Saída da borda ${boundary.name}: ${vertices.length} vértice(s).`);
+    traceLines.push(`Output after the ${boundary.name} boundary: ${vertices.length} vertex/vertices.`);
   });
 
   vertices = dedupePolygonVertices(vertices);
 
   if (vertices.length >= 3) {
-    traceLines.push(`Resultado final: polígono com ${vertices.length} vértice(s).`);
+    traceLines.push(`Final result: polygon with ${vertices.length} vertex/vertices.`);
     return {
       replacementShape: {
         ...shape,
@@ -1078,7 +1078,7 @@ function clipPolygonShape(shape, rect, algorithm) {
   }
 
   if (vertices.length === 2) {
-    traceLines.push("Resultado final degenerado: o recorte gerou apenas um segmento.");
+    traceLines.push("Degenerate final result: clipping produced only one segment.");
     return {
       replacementShape: {
         id: shape.id,
@@ -1092,7 +1092,7 @@ function clipPolygonShape(shape, rect, algorithm) {
   }
 
   if (vertices.length === 1) {
-    traceLines.push("Resultado final degenerado: o recorte gerou apenas um ponto.");
+    traceLines.push("Degenerate final result: clipping produced only one point.");
     return {
       replacementShape: {
         id: shape.id,
@@ -1103,7 +1103,7 @@ function clipPolygonShape(shape, rect, algorithm) {
     };
   }
 
-  traceLines.push("Resultado final: polígono totalmente removido pela janela de recorte.");
+  traceLines.push("Final result: polygon completely removed by the clipping window.");
   return {
     replacementShape: null,
     traceLines,
@@ -1118,14 +1118,14 @@ function traceClipLineCohenSutherland(start, end, rect) {
   let code1 = getOutCode({ x: x1, y: y1 }, rect);
   let code2 = getOutCode({ x: x2, y: y2 }, rect);
   const lines = [
-    "Algoritmo: Cohen-Sutherland",
-    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
-    `Reta original: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    "Algorithm: Cohen-Sutherland",
+    `Window: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    `Original line: start=${formatPoint(start)} end=${formatPoint(end)}`,
   ];
 
   for (let iteration = 1; iteration <= 16; iteration += 1) {
     lines.push(
-      `iteracao ${iteration}: code1=${code1.toString(2).padStart(4, "0")} code2=${code2.toString(2).padStart(4, "0")}`,
+      `iteration ${iteration}: code1=${code1.toString(2).padStart(4, "0")} code2=${code2.toString(2).padStart(4, "0")}`,
     );
 
     if (!(code1 | code2)) {
@@ -1133,12 +1133,12 @@ function traceClipLineCohenSutherland(start, end, rect) {
         start: clampWorldPoint({ x: x1, y: y1 }),
         end: clampWorldPoint({ x: x2, y: y2 }),
       };
-      lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
+      lines.push(`accepted: final segment ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
       return { result, lines };
     }
 
     if (code1 & code2) {
-      lines.push("rejeitada: os codigos compartilham uma regiao externa.");
+      lines.push("rejected: the codes share an external region.");
       return { result: null, lines };
     }
 
@@ -1150,37 +1150,37 @@ function traceClipLineCohenSutherland(start, end, rect) {
     if (outsideCode & 8) {
       x = x1 + ((x2 - x1) * (rect.maxY - y1)) / (y2 - y1);
       y = rect.maxY;
-      border = "topo";
+      border = "top";
     } else if (outsideCode & 4) {
       x = x1 + ((x2 - x1) * (rect.minY - y1)) / (y2 - y1);
       y = rect.minY;
-      border = "base";
+      border = "bottom";
     } else if (outsideCode & 2) {
       y = y1 + ((y2 - y1) * (rect.maxX - x1)) / (x2 - x1);
       x = rect.maxX;
-      border = "direita";
+      border = "right";
     } else {
       y = y1 + ((y2 - y1) * (rect.minX - x1)) / (x2 - x1);
       x = rect.minX;
-      border = "esquerda";
+      border = "left";
     }
 
-    lines.push(`interseccao na borda ${border}: ${formatPoint({ x, y })}`);
+    lines.push(`intersection on the ${border} boundary: ${formatPoint({ x, y })}`);
 
     if (outsideCode === code1) {
       x1 = x;
       y1 = y;
       code1 = getOutCode({ x: x1, y: y1 }, rect);
-      lines.push(`atualiza ponto inicial -> ${formatPoint({ x: x1, y: y1 })}`);
+      lines.push(`update start point -> ${formatPoint({ x: x1, y: y1 })}`);
     } else {
       x2 = x;
       y2 = y;
       code2 = getOutCode({ x: x2, y: y2 }, rect);
-      lines.push(`atualiza ponto final -> ${formatPoint({ x: x2, y: y2 })}`);
+      lines.push(`update end point -> ${formatPoint({ x: x2, y: y2 })}`);
     }
   }
 
-  lines.push("interrompido: limite de iteracoes atingido.");
+  lines.push("interrupted: iteration limit reached.");
   return { result: null, lines };
 }
 
@@ -1196,37 +1196,37 @@ function traceClipLineLiangBarsky(start, end, rect) {
   ];
   let u1 = 0;
   let u2 = 1;
-  const borders = ["esquerda", "direita", "base", "topo"];
+  const borders = ["left", "right", "bottom", "top"];
   const lines = [
-    "Algoritmo: Liang-Barsky",
-    `Janela: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
-    `Reta original: inicio=${formatPoint(start)} fim=${formatPoint(end)}`,
+    "Algorithm: Liang-Barsky",
+    `Window: min=(${rect.minX}, ${rect.minY}) max=(${rect.maxX}, ${rect.maxY})`,
+    `Original line: start=${formatPoint(start)} end=${formatPoint(end)}`,
     `dx=${dx}, dy=${dy}`,
   ];
 
   for (let index = 0; index < 4; index += 1) {
     if (p[index] === 0) {
-      lines.push(`borda ${borders[index]}: p=0, q=${q[index]}`);
+      lines.push(`boundary ${borders[index]}: p=0, q=${q[index]}`);
       if (q[index] < 0) {
-        lines.push("rejeitada: reta paralela e fora da janela.");
+        lines.push("rejected: parallel line outside the window.");
         return { result: null, lines };
       }
       continue;
     }
 
     const ratio = q[index] / p[index];
-    lines.push(`borda ${borders[index]}: p=${p[index]}, q=${q[index]}, r=${ratio.toFixed(4)}`);
+    lines.push(`boundary ${borders[index]}: p=${p[index]}, q=${q[index]}, r=${ratio.toFixed(4)}`);
     if (p[index] < 0) {
       u1 = Math.max(u1, ratio);
-      lines.push(`atualiza u1 -> ${u1.toFixed(4)}`);
+      lines.push(`update u1 -> ${u1.toFixed(4)}`);
     } else {
       u2 = Math.min(u2, ratio);
-      lines.push(`atualiza u2 -> ${u2.toFixed(4)}`);
+      lines.push(`update u2 -> ${u2.toFixed(4)}`);
     }
   }
 
   if (u1 > u2) {
-    lines.push(`rejeitada: u1 (${u1.toFixed(4)}) > u2 (${u2.toFixed(4)}).`);
+    lines.push(`rejected: u1 (${u1.toFixed(4)}) > u2 (${u2.toFixed(4)}).`);
     return { result: null, lines };
   }
 
@@ -1234,7 +1234,7 @@ function traceClipLineLiangBarsky(start, end, rect) {
     start: clampWorldPoint({ x: start.x + u1 * dx, y: start.y + u1 * dy }),
     end: clampWorldPoint({ x: start.x + u2 * dx, y: start.y + u2 * dy }),
   };
-  lines.push(`aceita: segmento final ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
+  lines.push(`accepted: final segment ${formatPoint(result.start)} -> ${formatPoint(result.end)}`);
   return { result, lines };
 }
 
@@ -1318,7 +1318,7 @@ function applyToSelectedShapes(transformer) {
 
 function applyTranslation() {
   if (state.selectedIds.size === 0) {
-    setStatus("Selecione ao menos um elemento antes de aplicar a translação.");
+    setStatus("Select at least one element before applying translation.");
     return;
   }
 
@@ -1326,7 +1326,7 @@ function applyTranslation() {
   const ty = Number(translateYInput.value);
 
   if (Number.isNaN(tx) || Number.isNaN(ty)) {
-    setStatus("Informe valores numéricos válidos para a translação.");
+    setStatus("Enter valid numeric values for translation.");
     return;
   }
 
@@ -1365,12 +1365,12 @@ function applyTranslation() {
     }
   });
 
-  setStatus(`Translação aplicada em ${count} elemento(s): Δx=${tx}, Δy=${ty}.`);
+  setStatus(`Translation applied to ${count} element(s): Δx=${tx}, Δy=${ty}.`);
 }
 
 function applyLinearTransform(matrix, label) {
   if (state.selectedIds.size === 0) {
-    setStatus(`Selecione ao menos um elemento antes de aplicar ${label}.`);
+    setStatus(`Select at least one element before applying ${label}.`);
     return;
   }
 
@@ -1414,7 +1414,7 @@ function applyLinearTransform(matrix, label) {
     }
   });
 
-  setStatus(`${label} aplicada em ${count} elemento(s). Pivô: (${pivot.x}, ${pivot.y}).`);
+  setStatus(`${label} applied to ${count} element(s). Pivot: (${pivot.x}, ${pivot.y}).`);
 }
 
 function applyScale() {
@@ -1422,7 +1422,7 @@ function applyScale() {
   const sy = Number(scaleYInput.value);
 
   if (Number.isNaN(sx) || Number.isNaN(sy)) {
-    setStatus("Informe valores numéricos válidos para a escala.");
+    setStatus("Enter valid numeric values for scale.");
     return;
   }
 
@@ -1431,7 +1431,7 @@ function applyScale() {
       [sx, 0],
       [0, sy],
     ],
-    `Escala (Sx=${sx}, Sy=${sy})`,
+    `Scale (Sx=${sx}, Sy=${sy})`,
   );
 }
 
@@ -1439,7 +1439,7 @@ function applyRotation() {
   const angle = Number(rotationInput.value);
 
   if (Number.isNaN(angle)) {
-    setStatus("Informe um ângulo numérico válido para a rotação.");
+    setStatus("Enter a valid numeric angle for rotation.");
     return;
   }
 
@@ -1452,7 +1452,7 @@ function applyRotation() {
       [cos, -sin],
       [sin, cos],
     ],
-    `Rotação (${angle}°)`,
+    `Rotation (${angle}°)`,
   );
 }
 
@@ -1473,9 +1473,9 @@ function applyReflection(mode) {
   };
 
   const labelByMode = {
-    x: "Reflexão no eixo X",
-    y: "Reflexão no eixo Y",
-    xy: "Reflexão nos eixos X/Y",
+    x: "Reflection across the X axis",
+    y: "Reflection across the Y axis",
+    xy: "Reflection across the X/Y axes",
   };
 
   applyLinearTransform(matrixByMode[mode], labelByMode[mode]);
@@ -1483,12 +1483,12 @@ function applyReflection(mode) {
 
 function applyClip() {
   if (!state.clipWindow) {
-    setStatus("Defina primeiro uma janela de recorte.");
+    setStatus("Define a clipping window first.");
     return;
   }
 
   if (state.selectedIds.size === 0) {
-    setStatus("Selecione ao menos uma reta ou polígono antes de aplicar o recorte.");
+    setStatus("Select at least one line or polygon before applying clipping.");
     return;
   }
 
@@ -1507,7 +1507,7 @@ function applyClip() {
 
     if (shape.type === "line") {
       const trace = clipLineWithTrace(shape.start, shape.end, state.clipWindow, algorithm);
-      traceBlocks.push(`Linha ${shape.id}\n${trace.lines.join("\n")}`);
+      traceBlocks.push(`Line ${shape.id}\n${trace.lines.join("\n")}`);
 
       if (!trace.result) {
         removed += 1;
@@ -1546,14 +1546,14 @@ function applyClip() {
   updateStats();
   refreshDataInspector();
   setAlgorithmTrace(
-    `Recorte por ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
+    `Clipping by ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}`,
     traceBlocks.length > 0
       ? traceBlocks.join("\n\n----------------\n\n").split("\n")
-      : ["Nenhuma reta ou polígono foi processado."],
+      : ["No line or polygon was processed."],
   );
   render();
   setStatus(
-    `Recorte ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}: ${clipped} elemento(s) processado(s), ${generatedSegments} segmento(s) gerado(s), ${removed} removido(s), ${ignored} ignorado(s).`,
+    `Clipping ${algorithm === "cohen" ? "Cohen-Sutherland" : "Liang-Barsky"}: ${clipped} element(s) processed, ${generatedSegments} segment(s) generated, ${removed} removed, ${ignored} ignored.`,
   );
 }
 
@@ -1567,12 +1567,12 @@ function clearProject() {
   syncPendingButtons();
   refreshDataInspector();
   render();
-  setStatus("Projeto limpo.");
+  setStatus("Project cleared.");
 }
 
 function deleteSelected() {
   if (state.selectedIds.size === 0) {
-    setStatus("Nenhum elemento selecionado para exclusão.");
+    setStatus("No selected element to delete.");
     return;
   }
 
@@ -1583,12 +1583,12 @@ function deleteSelected() {
   updateStats();
   refreshDataInspector();
   render();
-  setStatus(`${removed} elemento(s) removido(s).`);
+  setStatus(`${removed} element(s) removed.`);
 }
 
 function finishPolygon() {
   if (state.pendingPoints.length < 3) {
-    setStatus("Um polígono precisa de pelo menos três vértices.");
+    setStatus("A polygon needs at least three vertices.");
     return;
   }
 
@@ -1600,7 +1600,8 @@ function finishPolygon() {
   state.pendingPoints = [];
   syncPendingButtons();
   refreshDataInspector();
-  setStatus("Polígono criado.");
+  render();
+  setStatus("Polygon created.");
 }
 
 function cancelPending() {
@@ -1609,7 +1610,7 @@ function cancelPending() {
   syncPendingButtons();
   refreshDataInspector();
   render();
-  setStatus("Operação em andamento cancelada.");
+  setStatus("Current operation canceled.");
 }
 
 function updateStats() {
@@ -1627,8 +1628,8 @@ function updateStats() {
   });
 
   stats.textContent =
-    `Pontos: ${totals.point} | Retas: ${totals.line} | Circunferencias: ${totals.circle} | Poligonos: ${totals.polygon} | Interpoladas: ${totals.interpolated} | Bezier: ${totals.bezier}`;
-  selectionSummary.textContent = `Selecionados: ${state.selectedIds.size}`;
+    `Points: ${totals.point} | Lines: ${totals.line} | Circles: ${totals.circle} | Polygons: ${totals.polygon} | Interpolated: ${totals.interpolated} | Bezier: ${totals.bezier}`;
+  selectionSummary.textContent = `Selected: ${state.selectedIds.size}`;
   refreshDataInspector();
 }
 
@@ -1765,7 +1766,7 @@ function addPointAt(position) {
     type: "point",
     position,
   });
-  setStatus(`Ponto criado em (${position.x}, ${position.y}).`);
+  setStatus(`Point created at (${position.x}, ${position.y}).`);
 }
 
 function addLinePoint(position) {
@@ -1775,7 +1776,7 @@ function addLinePoint(position) {
 
   if (state.pendingPoints.length < 2) {
     render();
-    setStatus(`Ponto inicial da reta registrado em (${position.x}, ${position.y}).`);
+    setStatus(`Line start point recorded at (${position.x}, ${position.y}).`);
     return;
   }
 
@@ -1787,12 +1788,14 @@ function addLinePoint(position) {
     algorithm: lineAlgorithmSelect.value,
   });
   setAlgorithmTrace(
-    `Rasterização de reta por ${lineAlgorithmSelect.value.toUpperCase()}`,
+    `Line rasterization by ${lineAlgorithmSelect.value.toUpperCase()}`,
     buildLineRasterTrace(start, end, lineAlgorithmSelect.value),
   );
   state.pendingPoints = [];
   syncPendingButtons();
-  setStatus(`Reta criada com ${lineAlgorithmSelect.value.toUpperCase()}.`);
+  refreshDataInspector();
+  render();
+  setStatus(`Line created with ${lineAlgorithmSelect.value.toUpperCase()}.`);
 }
 
 function addCirclePoint(position) {
@@ -1802,7 +1805,7 @@ function addCirclePoint(position) {
 
   if (state.pendingPoints.length < 2) {
     render();
-    setStatus(`Centro da circunferência registrado em (${position.x}, ${position.y}).`);
+    setStatus(`Circle center recorded at (${position.x}, ${position.y}).`);
     return;
   }
 
@@ -1818,7 +1821,9 @@ function addCirclePoint(position) {
   });
   state.pendingPoints = [];
   syncPendingButtons();
-  setStatus(`Circunferência criada com raio ${radius} pelo algoritmo de Bresenham.`);
+  refreshDataInspector();
+  render();
+  setStatus(`Circle created with radius ${radius} using Bresenham.`);
 }
 
 function addPolygonVertex(position) {
@@ -1826,7 +1831,7 @@ function addPolygonVertex(position) {
   syncPendingButtons();
   refreshDataInspector();
   render();
-  setStatus(`Vértice ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
+  setStatus(`Vertex ${state.pendingPoints.length} recorded at (${position.x}, ${position.y}).`);
 }
 
 function addInterpolatedPoint(position) {
@@ -1836,17 +1841,17 @@ function addInterpolatedPoint(position) {
   render();
 
   if (state.pendingPoints.length === 1) {
-    setStatus(`Interpolada: ponto P0 registrado em (${position.x}, ${position.y}).`);
+    setStatus(`Interpolated: point P0 recorded at (${position.x}, ${position.y}).`);
     return;
   }
 
   if (state.pendingPoints.length === 2) {
-    setStatus(`Interpolada: ponto P1 registrado em (${position.x}, ${position.y}). Agora clique em P2.`);
+    setStatus(`Interpolated: point P1 recorded at (${position.x}, ${position.y}). Now click P2.`);
     return;
   }
 
   if (state.pendingPoints.length === 3) {
-    setStatus(`Interpolada: ponto P2 registrado em (${position.x}, ${position.y}). Agora clique em P3.`);
+    setStatus(`Interpolated: point P2 recorded at (${position.x}, ${position.y}). Now click P3.`);
     return;
   }
 
@@ -1859,8 +1864,10 @@ function addInterpolatedPoint(position) {
   });
   state.pendingPoints = [];
   syncPendingButtons();
-  setAlgorithmTrace("Curva interpolada", buildCurveTrace(createdShape));
-  setStatus(`Curva interpolada criada com ${sampleCount} amostras.`);
+  refreshDataInspector();
+  render();
+  setAlgorithmTrace("Interpolated curve", buildCurveTrace(createdShape));
+  setStatus(`Interpolated curve created with ${sampleCount} samples.`);
 }
 
 function addBezierPoint(position) {
@@ -1870,7 +1877,7 @@ function addBezierPoint(position) {
   render();
 
   if (state.pendingPoints.length < 4) {
-    setStatus(`Bezier: ponto de controle ${state.pendingPoints.length} registrado em (${position.x}, ${position.y}).`);
+    setStatus(`Bezier: control point ${state.pendingPoints.length} recorded at (${position.x}, ${position.y}).`);
     return;
   }
 
@@ -1886,8 +1893,10 @@ function addBezierPoint(position) {
   });
   state.pendingPoints = [];
   syncPendingButtons();
-  setAlgorithmTrace("Curva de Bezier", buildCurveTrace(createdShape));
-  setStatus(`Curva de Bezier criada com ${sampleCount} amostras.`);
+  refreshDataInspector();
+  render();
+  setAlgorithmTrace("Bezier curve", buildCurveTrace(createdShape));
+  setStatus(`Bezier curve created with ${sampleCount} samples.`);
 }
 
 function completeSelection(rect) {
@@ -1897,7 +1906,7 @@ function completeSelection(rect) {
   updateStats();
   refreshDataInspector();
   render();
-  setStatus(`${state.selectedIds.size} elemento(s) selecionado(s).`);
+  setStatus(`${state.selectedIds.size} element(s) selected.`);
 }
 
 function handleCanvasClick(position) {
@@ -1969,7 +1978,7 @@ canvas.addEventListener("pointerup", (event) => {
       refreshDataInspector();
       render();
       setStatus(
-        `Janela de recorte definida: [${rect.minX}, ${rect.minY}] até [${rect.maxX}, ${rect.maxY}].`,
+        `Clipping window defined: [${rect.minX}, ${rect.minY}] to [${rect.maxX}, ${rect.maxY}].`,
       );
     }
     return;
@@ -1995,12 +2004,12 @@ clearClipButton.addEventListener("click", () => {
   state.clipWindow = null;
   refreshDataInspector();
   render();
-  setStatus("Janela de recorte removida.");
+  setStatus("Clipping window removed.");
 });
 deleteSelectedButton.addEventListener("click", deleteSelected);
 clearCanvasButton.addEventListener("click", clearProject);
 clearTraceButton.addEventListener("click", () => {
-  setAlgorithmTrace("Console limpo", ["Aguardando a criação de uma reta ou a aplicação de um recorte."]);
+  setAlgorithmTrace("Console cleared", ["Waiting for a line to be created or for clipping to be applied."]);
 });
 themeToggleButton.addEventListener("click", () => {
   applyTheme(state.theme === "dark" ? "light" : "dark");
